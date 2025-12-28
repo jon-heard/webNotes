@@ -201,18 +201,16 @@ if ($notesParam === null) {
 
         html {
             height: 100%;
+            height: 100dvh;
             overflow: hidden;
         }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             height: 100%;
+            height: 100dvh;
             display: flex;
             overflow: hidden;
-            position: fixed;
-            width: 100%;
-            top: 0;
-            left: 0;
         }
 
         /* Night mode */
@@ -324,6 +322,9 @@ if ($notesParam === null) {
             flex-shrink: 0;
             border-right: 1px solid #ddd;
             touch-action: none;
+            overscroll-behavior: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         #sidebar-resizer:hover,
@@ -559,6 +560,16 @@ if ($notesParam === null) {
             min-height: 0;
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
+        }
+
+        #editor::selection {
+            background: #FFB830;
+            color: #000;
+        }
+
+        #editor::-moz-selection {
+            background: #FFB830;
+            color: #000;
         }
 
         #status-bar {
@@ -1468,34 +1479,38 @@ if ($notesParam === null) {
                     '<span id="link-marker">' + escapeHtml(linkText) + '</span>';
 
                 const marker = mirror.querySelector('#link-marker');
-                const markerRect = marker.getBoundingClientRect();
                 const mirrorRect = mirror.getBoundingClientRect();
 
-                // Calculate position relative to mirror, then adjust for scroll
-                const left = markerRect.left - mirrorRect.left - editor.scrollLeft;
-                const top = markerRect.top - mirrorRect.top - editor.scrollTop;
+                // Use getClientRects() to handle wrapped text (returns one rect per line)
+                const rects = marker.getClientRects();
 
-                const highlight = document.createElement('div');
-                highlight.className = 'link-highlight';
-                highlight.style.left = left + 'px';
-                highlight.style.top = top + 'px';
-                highlight.style.width = markerRect.width + 'px';
-                highlight.style.height = lineHeight + 'px';
-                highlight.dataset.linkContent = m.content;
+                for (const rect of rects) {
+                    // Calculate position relative to mirror, then adjust for scroll
+                    const left = rect.left - mirrorRect.left - editor.scrollLeft;
+                    const top = rect.top - mirrorRect.top - editor.scrollTop;
 
-                highlight.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    navigateToWikiLink(e.target.dataset.linkContent);
-                });
+                    const highlight = document.createElement('div');
+                    highlight.className = 'link-highlight';
+                    highlight.style.left = left + 'px';
+                    highlight.style.top = top + 'px';
+                    highlight.style.width = rect.width + 'px';
+                    highlight.style.height = rect.height + 'px';
+                    highlight.dataset.linkContent = m.content;
 
-                highlight.addEventListener('contextmenu', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    openLinkInNewTab(e.target.dataset.linkContent);
-                });
+                    highlight.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        navigateToWikiLink(e.target.dataset.linkContent);
+                    });
 
-                overlay.appendChild(highlight);
+                    highlight.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openLinkInNewTab(e.target.dataset.linkContent);
+                    });
+
+                    overlay.appendChild(highlight);
+                }
             }
 
             document.body.removeChild(mirror);
@@ -2618,6 +2633,14 @@ if ($notesParam === null) {
             const sidebar = document.getElementById('sidebar');
             let isResizing = false;
 
+            // Snap behavior constants
+            const barWidth = 15;
+            const snapThreshold = barWidth * 3;              // 45px - threshold when unsnapped
+            const snapOutThreshold = barWidth * 0.5;         // 7.5px - threshold to pop out from snapped
+
+            let startedSnapped = false;  // Whether drag started in snapped state
+            let followOffset = 0;
+
             // Restore sidebar width from localStorage
             const savedWidth = localStorage.getItem('sidebarWidth');
             if (savedWidth !== null) {
@@ -2630,14 +2653,45 @@ if ($notesParam === null) {
                 document.body.style.cursor = 'ew-resize';
                 document.body.style.userSelect = 'none';
                 e.preventDefault();
+                e.stopPropagation();
+
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                startedSnapped = sidebar.offsetWidth === 0;
+
+                if (!startedSnapped) {
+                    // Calculate offset to maintain finger position on bar
+                    followOffset = sidebar.offsetWidth - clientX;
+                }
             }
 
             function doResize(e) {
                 if (!isResizing) return;
+                // Prevent browser back gesture on touch
+                if (e.cancelable) {
+                    e.preventDefault();
+                }
+                e.stopPropagation();
+
                 const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                const newWidth = Math.max(0, clientX);
-                sidebar.style.width = newWidth + 'px';
-                updateLinkHighlights();
+
+                if (startedSnapped) {
+                    // Started snapped: stay snapped until threshold, then pop out and end drag
+                    if (clientX >= snapOutThreshold) {
+                        sidebar.style.width = snapThreshold + 'px';
+                        updateLinkHighlights();
+                        stopResize();
+                    } else {
+                        sidebar.style.width = '0px';
+                    }
+                } else {
+                    // Normal unsnapped behavior
+                    if (clientX < snapThreshold) {
+                        sidebar.style.width = '0px';
+                    } else {
+                        sidebar.style.width = Math.max(0, clientX + followOffset) + 'px';
+                    }
+                    updateLinkHighlights();
+                }
             }
 
             function stopResize() {
@@ -2656,6 +2710,20 @@ if ($notesParam === null) {
             document.addEventListener('touchmove', doResize, { passive: false });
             document.addEventListener('mouseup', stopResize);
             document.addEventListener('touchend', stopResize);
+
+            // Handle mobile keyboard with Visual Viewport API
+            if (window.visualViewport) {
+                const updateViewportHeight = () => {
+                    const vh = window.visualViewport.height;
+                    document.documentElement.style.height = vh + 'px';
+                    document.body.style.height = vh + 'px';
+                };
+                window.visualViewport.addEventListener('resize', updateViewportHeight);
+                window.visualViewport.addEventListener('scroll', () => {
+                    // Prevent page from scrolling when keyboard appears
+                    window.scrollTo(0, 0);
+                });
+            }
         });
     </script>
 </body>
