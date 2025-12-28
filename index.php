@@ -84,7 +84,7 @@ if ($action === 'savefile') {
     exit;
 }
 
-$icon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAACXBIWXMAAAsTAAALEwEAmpwYAAAEDUlEQVR4nO2cXWscVRjHz4fwwtrsnDkzm52Zc7YJNkpRCmrRKthUk4pSvBAkL13ToOiNiBcifgHRxhf0wlaFiqYGavFbaFWUpt30phQEaZpubWmnZ448s9mi3uSiycwz0/8Pfhd79zzPf2bOmRl2hAAAAAAAAAAAAAAAAAAAAAAAgC0lDE3jsV3JO4/uSv54aCy5GkXaSmUcZ+NYZ7sfTG7s35P8Of9C9PXbLyf3i6ozNDS6fbRtvgoCnZU9YHmHqsC4iceT7psvxWOiijR8vT9smuvUTLNp3CvPRW7xvWG3/EXTrS2FLv0xYO3aUpjXSjVT7dQD9ZLEJnvtYPSWqBKer+f9wORnxcxE7FaO8Q8g3cDul6Gbnohvny2dA9FRUZUzg8KgohfeaJU+yHSTPfJ6Kw+EZH+m0JqhAvM3HUV1DCP9VyjUo45N9uqLUSS4In392eAyVfbQ0i12aiLJQzn4VPyT4Lq19QNtafGrw5qRbuC5Y6ELm8aFoXEzk+1YcMNT+jAdMbQjKXtYaUEeOtBf5Gcn488FNzxlTlFxtE0se1BpQX777nAeyPgj8QXBDc83y1Tc2aP1v1yl69J9CvX88FhyTXDDV/oqFXd5qfxBpQVJveaPWSJtBTcGjxjKHlJasIO+BTcQCDMQCDMQCDMQCDM2ep/wzJ4kb+D6qcDtHNGlv9+Qm6zgxqCwzK7eVUoEssrKygRy8+Zf7om9+9zU9KFa/s6qGMjeJ8fd9Eynlr+zqgVytygRyCorEYjlJQKxvEQglpcIxPISgVheIhDLSwRieYlALC8RiOUl+0C4++zk87efTe18YDfeh9RNiUBWWYlALC8RiOUlArG8RCCWlwjE8hKBWF4iEMtLBGJ5iUAsLxGI5SUCsbxkH0jRT1klEwU3cIYwA4EwA4EwA4Eww/PNFSqs17tY+pCygryydiEPw/PNmuCG55szVFz33OnSB5UV5Nnl0/1AlP5dcP34zInvvyl9UFlBfrd4vH/J8vVJwQ1P6Tkqbm5uvvRBZQXZ6RzuBxKYjuDG9uaOIenrtNkadefP/1b6sLItttv9xQXNkYx6pk8bCo5IZT6lI2Zm9r//w6ub9tYlNzU1u75+mI8FVxqN6D6p2j0qdOGjD0sfXLZFHln4YH13pS9Lqe8VnGkoMy6VsSrcUbtQ7K1LeRjUG/XoBe2nRRVY//5i/n13+hvxysqvpQ8z24Q1Y3CZysNQek5UCU+ZfVK185vFcHgk35Esnjie792rcPPY6110y2d+zre2VDv1MLhMVebM+D/bWq17pNLv006k7Mfj8k7t9/CJ58XbRNWhbSHt1T3f/EB3tdI3+cLPWt/0+rXqk1Q7260tAAAAAAAAAAAAAAAAAAAAAEDUh38AWDyK43FOl1YAAAAASUVORK5CYII=";
+$icon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IB2cksfwAAAARnQU1BAACxjwv8YQUAAAAgY0hSTQAAeiYAAICEAAD6AAAAgOgAAHUwAADqYAAAOpgAABdwnLpRPAAAAAlwSFlzAAAuIwAALiMBeKU/dgAAAAd0SU1FB+kMHAItNCC6n/gAAAQtSURBVHja7ZtbbBRVGMd/35ntbmmFLpdFpd02pQQvbelWeDDeHrQ3lKAhClGjiTGiMdE3EROJEhNLvMT4QEQSNIRLMEoTSPpAWx/kIpqIlFJsMaVloRVLWSy9Qbsz8/lASlC5+ELS7p7/0zkzcyb5/875vjnfSUa4gYqKSqIFEf9lH1aMJomeH2LKpTExTGBNCanOmkpy5jT68yP+9+Fs8/EHm347fL3n5VoX8/LKcmdNdz8aGNZnPRVhEssIlM/Vzvm5/vJ1m9sP3RRAtLB4adDhG9cjM8OBqphLRcynJKrcHlayQjqhDY+MCr39QutpoanZ0NAcIOlBVgituc9797Pt7R9eF0B+4b1vGJHPVZHqmMfqZUmiEZ3MC4BT54R1OzNoaHYwAjXl7pYvdh5/cfy+c/XMOyKbBWTVsiRrlifJyWbSKycLnljkkRmEH9sdOv40ZS8tnpn86ei5fVcA5OWV5WYE9AdVgquWJXml0iXVtLDIJ5QB+9scTvWZR5+rmbHj55ZEwgA4Ge5aXzWrOualpPlxraxyqYz5DI8ifQmzA0CKikqinvonA0ZMw3uXJn3M30zxPqF6bSYoPBYz9xjX1ydVxVTF3JQ3D1AQUSrLPFwfDO5bBuFxgIqYT7qooswDoCeh1UaVeQCl+ekDYEHB5ZWeGJIZxsAcgEiOpg2A2eHLk31+UEJGIRsgO5Q2/q94vTgmxpDmsgAsgDSXFBQW3zD9xwp9vls1iuvDg6szSQxKagLo6tifVjNfOO8hGwLXBOB6HtWLX2Dla++kZP9/JUERQa46Cky1vs0BNgfYfYAFYAFYABaABWABWAAWwM3PAyaKysuLqfv2S1zP4/4HniKR+MueB9hawOYAC8ACsAAsAAvAArAALAALwAK4ZdXgrarCJhwAWw3aHGABpC2AQYDhkYtpY3poaHi8OWCAMwBne/vSBkBvb2K82WMQTgC0tB5PGwAtre3jzU6DUg/Q1LgvbQCMexWReuM6zi7A3dO4l/ipnpQ333XyNHsa9yrgumPObtPT0dINfJ1MutSuW5/S5lWV2tr1eJ4nKrKpu/tIjwMwbeqMQ+I4r544EQ9mZoZYtHBBSgLYsHEbW7bWAVwwytP9/X1DDsDAQGIwJxxpFVhx8OCvEgoFUwqCqrJh4zY++XQjquoj8ky869hhuOq/wQv9fb+Hp88+r6o1Bw78Im1tHZSW3kU4PG3Sx/zbq2vZsrXusnl4M951bNuVYujfA/LnliwxsF1VpwYCDlUVj1BZ9TClxXdzx50RsrOmTGjDwyMXOfPHWY4eO05T4z4amvbiuh7ABUSej3e21v+jGrzWS+bMnz8rmAysUeR1IDDJI8AV+Ep9//14vO3Mf8rhG43MyyvLDQS9peqzBNFCIArcNtF3usBpoFNE6t0xZ3d395Hrft//Bqgc3LEUIT/bAAAAAElFTkSuQmCC";
 
 $notesParam = isset($_GET['notes']) ? $_GET['notes'] : null;
 
@@ -241,6 +241,11 @@ if ($notesParam === null) {
 
         body.night-mode #sidebar-buttons button:hover {
             background: #404040;
+        }
+
+        body.night-mode #btn-save.dirty {
+            background: #e74c3c;
+            border-color: #c0392b;
         }
 
         body.night-mode #tabs {
@@ -416,14 +421,16 @@ if ($notesParam === null) {
         }
 
         .drop-zone {
-            height: 8px;
-            margin: 0 10px;
+            height: 5px;
+            margin: 0;
+            margin-right: 10px;
             border-radius: 2px;
             transition: height 0.1s, background 0.1s;
+            box-sizing: border-box;
         }
 
         .drop-zone.drag-over {
-            height: 12px;
+            height: 36px;
             background: #4080ff;
         }
 
@@ -449,9 +456,9 @@ if ($notesParam === null) {
             background: #e8e8e8;
         }
 
-        .dirty-indicator {
-            color: #e74c3c;
-            font-weight: bold;
+        #btn-save.dirty {
+            background: #e74c3c;
+            border-color: #c0392b;
         }
 
         /* Main area */
@@ -741,7 +748,7 @@ if ($notesParam === null) {
         <div id="sidebar-buttons">
             <button id="btn-find" title="Find">&#128269;</button>
             <button id="btn-new" title="New Note">&#10133;</button>
-            <button id="btn-save" title="Save"><span id="dirty-indicator"></span>&#128190;</button>
+            <button id="btn-save" title="Save">&#128190;</button>
             <button id="btn-night" title="Toggle Night Mode">&#9681;</button>
             <button id="btn-back" title="Back to Notes List">&#8592;</button>
         </div>
@@ -800,6 +807,15 @@ if ($notesParam === null) {
         let contextMenuTarget = null;
         let collapsedPaths = new Set();
         let nightMode = localStorage.getItem('nightMode') === 'true';
+
+        // Touch drag state
+        let touchDragPath = null;
+        let touchDragElement = null;
+        let touchDragClone = null;
+        let touchDragStartX = 0;
+        let touchDragStartY = 0;
+        let touchDragStarted = false;
+        let touchDragCancelled = false;
 
         // Apply night mode on load
         if (nightMode) {
@@ -934,9 +950,8 @@ if ($notesParam === null) {
 
         // Update dirty indicator
         function updateDirtyIndicator() {
-            const indicator = document.getElementById('dirty-indicator');
-            indicator.textContent = isDirty ? '*' : '';
-            indicator.className = isDirty ? 'dirty-indicator' : '';
+            const saveBtn = document.getElementById('btn-save');
+            saveBtn.classList.toggle('dirty', isDirty);
         }
 
         // Mark as dirty and start autosave timer
@@ -1019,7 +1034,10 @@ if ($notesParam === null) {
             const dropZone = document.createElement('div');
             dropZone.className = 'drop-zone';
             dropZone.dataset.dropTarget = JSON.stringify(targetInfo);
-            dropZone.style.marginLeft = (10 + level * 15) + 'px';
+            dropZone.dataset.dropInfo = JSON.stringify(targetInfo); // For touch drag
+            // Use padding instead of margin so drop zone extends to left edge
+            dropZone.style.paddingLeft = (10 + level * 15) + 'px';
+            dropZone.style.marginLeft = '0';
 
             dropZone.addEventListener('dragover', (e) => {
                 e.preventDefault();
@@ -1089,42 +1107,48 @@ if ($notesParam === null) {
                 nameSpan.className = 'note-name';
                 nameSpan.textContent = note.name;
 
-                let clickTimer = null;
+                // Track last tap time for double-tap detection
+                let lastTapTime = 0;
+
                 nameSpan.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    if (clickTimer) {
-                        clearTimeout(clickTimer);
-                        clickTimer = null;
-                        return;
-                    }
-                    clickTimer = setTimeout(() => {
-                        clickTimer = null;
-                        if (tabs.length > 0) {
-                            // If already on this note, don't do anything (preserves focus for Del key)
-                            const currentPath = tabs[activeTabIndex];
-                            if (JSON.stringify(path) === JSON.stringify(currentPath)) {
-                                return;
-                            }
-                            saveTabState();
-                            tabs[activeTabIndex] = path;
-                            tabStates[activeTabIndex] = null; // Reset state for new note
-                            // Invalidate search when switching notes with "all notes" off
-                            if (!findAllNotes) {
-                                invalidateSearch();
-                            }
-                            renderHierarchy();
-                            renderTabs();
-                            updateEditor();
+                    if (tabs.length > 0) {
+                        // If already on this note, don't do anything (preserves focus for Del key)
+                        const currentPath = tabs[activeTabIndex];
+                        if (JSON.stringify(path) === JSON.stringify(currentPath)) {
+                            return;
                         }
-                    }, 200);
+                        saveTabState();
+                        tabs[activeTabIndex] = path;
+                        tabStates[activeTabIndex] = null; // Reset state for new note
+                        // Invalidate search when switching notes with "all notes" off
+                        if (!findAllNotes) {
+                            invalidateSearch();
+                        }
+                        // Preserve hierarchy scroll position (relative to bottom for keyboard resilience)
+                        const hierarchyEl = document.getElementById('hierarchy');
+                        const distFromBottom = hierarchyEl.scrollHeight - hierarchyEl.scrollTop - hierarchyEl.clientHeight;
+                        renderHierarchy();
+                        hierarchyEl.scrollTop = hierarchyEl.scrollHeight - hierarchyEl.clientHeight - distFromBottom;
+                        renderTabs();
+                        updateEditor();
+                    }
+                });
+
+                // Double-tap/double-click to rename - custom detection for better touch support
+                nameSpan.addEventListener('touchend', (e) => {
+                    const now = Date.now();
+                    if (now - lastTapTime < 500) {
+                        e.preventDefault();
+                        renameNote(path);
+                        lastTapTime = 0;
+                    } else {
+                        lastTapTime = now;
+                    }
                 });
 
                 nameSpan.addEventListener('dblclick', (e) => {
                     e.stopPropagation();
-                    if (clickTimer) {
-                        clearTimeout(clickTimer);
-                        clickTimer = null;
-                    }
                     renameNote(path);
                 });
 
@@ -1139,7 +1163,11 @@ if ($notesParam === null) {
                         if (!findAllNotes) {
                             invalidateSearch();
                         }
+                        // Preserve hierarchy scroll position (relative to bottom for keyboard resilience)
+                        const hierarchyEl = document.getElementById('hierarchy');
+                        const distFromBottom = hierarchyEl.scrollHeight - hierarchyEl.scrollTop - hierarchyEl.clientHeight;
                         renderHierarchy();
+                        hierarchyEl.scrollTop = hierarchyEl.scrollHeight - hierarchyEl.clientHeight - distFromBottom;
                         renderTabs();
                         updateEditor();
                     }
@@ -1171,6 +1199,116 @@ if ($notesParam === null) {
                     const sourcePath = JSON.parse(e.dataTransfer.getData('text/plain'));
                     moveNote(sourcePath, path);
                 });
+
+                // Touch drag support - horizontal drag only to avoid conflict with scroll
+                div.addEventListener('touchstart', (e) => {
+                    if (path.length <= 1) return; // Can't drag root
+                    touchDragPath = path;
+                    touchDragElement = div;
+                    touchDragStartX = e.touches[0].clientX;
+                    touchDragStartY = e.touches[0].clientY;
+                    touchDragStarted = false;
+                    touchDragCancelled = false;
+                }, { passive: true });
+
+                div.addEventListener('touchmove', (e) => {
+                    if (!touchDragPath || JSON.stringify(touchDragPath) !== JSON.stringify(path)) return;
+                    if (touchDragCancelled) return;
+
+                    const touch = e.touches[0];
+                    const moveX = Math.abs(touch.clientX - touchDragStartX);
+                    const moveY = Math.abs(touch.clientY - touchDragStartY);
+
+                    // If vertical movement dominates, cancel drag and allow scroll
+                    if (!touchDragStarted && moveY > 10 && moveY > moveX) {
+                        touchDragCancelled = true;
+                        touchDragPath = null;
+                        return;
+                    }
+
+                    // Start drag after horizontal movement of 15px
+                    if (!touchDragStarted && moveX > 15) {
+                        touchDragStarted = true;
+                        // Create visual clone
+                        touchDragClone = div.cloneNode(true);
+                        touchDragClone.style.position = 'fixed';
+                        touchDragClone.style.pointerEvents = 'none';
+                        touchDragClone.style.opacity = '0.7';
+                        touchDragClone.style.zIndex = '1000';
+                        touchDragClone.style.width = div.offsetWidth + 'px';
+                        touchDragClone.style.background = nightMode ? '#2a3a5a' : '#d0e0ff';
+                        document.body.appendChild(touchDragClone);
+                        div.style.opacity = '0.3';
+                    }
+
+                    if (touchDragStarted) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        // Disable scroll on hierarchy while dragging
+                        document.getElementById('hierarchy').style.overflow = 'hidden';
+                        touchDragClone.style.left = touch.clientX - 20 + 'px';
+                        touchDragClone.style.top = touch.clientY - 10 + 'px';
+
+                        // Find element under touch
+                        touchDragClone.style.display = 'none';
+                        const elementUnder = document.elementFromPoint(touch.clientX, touch.clientY);
+                        touchDragClone.style.display = '';
+
+                        // Clear previous drag-over states
+                        document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+
+                        // Highlight drop target
+                        if (elementUnder) {
+                            const noteItem = elementUnder.closest('.note-item');
+                            const dropZone = elementUnder.closest('.drop-zone');
+                            if (noteItem) noteItem.classList.add('drag-over');
+                            if (dropZone) dropZone.classList.add('drag-over');
+                        }
+                    }
+                }, { passive: false });
+
+                div.addEventListener('touchend', (e) => {
+                    if (!touchDragPath || !touchDragStarted) {
+                        touchDragPath = null;
+                        return;
+                    }
+
+                    // Find drop target
+                    const touch = e.changedTouches[0];
+                    if (touchDragClone) touchDragClone.style.display = 'none';
+                    const elementUnder = document.elementFromPoint(touch.clientX, touch.clientY);
+
+                    // Clean up
+                    if (touchDragClone) {
+                        document.body.removeChild(touchDragClone);
+                        touchDragClone = null;
+                    }
+                    if (touchDragElement) {
+                        touchDragElement.style.opacity = '';
+                    }
+                    document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+                    // Restore scroll on hierarchy
+                    document.getElementById('hierarchy').style.overflow = '';
+
+                    // Perform drop
+                    if (elementUnder) {
+                        const noteItem = elementUnder.closest('.note-item');
+                        const dropZone = elementUnder.closest('.drop-zone');
+                        if (noteItem && noteItem.dataset.path) {
+                            const targetPath = JSON.parse(noteItem.dataset.path);
+                            moveNote(touchDragPath, targetPath);
+                        } else if (dropZone && dropZone.dataset.dropInfo) {
+                            const dropInfo = JSON.parse(dropZone.dataset.dropInfo);
+                            reorderNote(touchDragPath, dropInfo.path, dropInfo.type);
+                        }
+                    }
+
+                    touchDragPath = null;
+                    touchDragStarted = false;
+                });
+
+                // Store path in dataset for touch drop detection
+                div.dataset.path = JSON.stringify(path);
 
                 container.appendChild(div);
 
@@ -2717,6 +2855,21 @@ if ($notesParam === null) {
                     const vh = window.visualViewport.height;
                     document.documentElement.style.height = vh + 'px';
                     document.body.style.height = vh + 'px';
+
+                    // Scroll active note into view in hierarchy after keyboard resize
+                    const activeNote = document.querySelector('.note-item.active');
+                    if (activeNote) {
+                        const hierarchy = document.getElementById('hierarchy');
+                        const noteRect = activeNote.getBoundingClientRect();
+                        const hierarchyRect = hierarchy.getBoundingClientRect();
+
+                        // Check if note is outside visible area
+                        if (noteRect.top < hierarchyRect.top) {
+                            activeNote.scrollIntoView({ block: 'start', behavior: 'instant' });
+                        } else if (noteRect.bottom > hierarchyRect.bottom) {
+                            activeNote.scrollIntoView({ block: 'end', behavior: 'instant' });
+                        }
+                    }
                 };
                 window.visualViewport.addEventListener('resize', updateViewportHeight);
                 window.visualViewport.addEventListener('scroll', () => {
