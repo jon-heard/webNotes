@@ -3111,11 +3111,9 @@ if ($notesParam === null) {
                 replaceAll();
             });
 
-            document.getElementById('btn-back').addEventListener('click', () => {
+            document.getElementById('btn-back').addEventListener('click', async () => {
                 if (isDirty) {
-                    if (!confirm('You have unsaved changes. Leave anyway?')) {
-                        return;
-                    }
+                    await saveNotes();
                 }
                 window.location.href = window.location.pathname;
             });
