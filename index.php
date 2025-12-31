@@ -324,10 +324,65 @@ if ($notesParam === null) {
                 color: #666;
                 font-style: italic;
             }
+            .header-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            #btn-night {
+                padding: 8px 12px;
+                font-size: 18px;
+                background: #e0e0e0;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+            #btn-night:hover {
+                background: #d0d0d0;
+            }
+            /* Night mode styles */
+            body.night-mode {
+                background: #1a1a2e;
+                color: #e0e0e0;
+            }
+            body.night-mode .file-list a {
+                background: #2a2a4e;
+                color: #e0e0e0;
+            }
+            body.night-mode .file-list a:hover {
+                background: #3a3a5e;
+            }
+            body.night-mode .new-file {
+                border-top-color: #444;
+            }
+            body.night-mode .new-file input {
+                background: #2a2a4e;
+                border-color: #444;
+                color: #e0e0e0;
+            }
+            body.night-mode .new-file button {
+                background: #3060c0;
+            }
+            body.night-mode .new-file button:hover {
+                background: #2050b0;
+            }
+            body.night-mode #btn-night {
+                background: #3a3a5e;
+                color: #e0e0e0;
+            }
+            body.night-mode #btn-night:hover {
+                background: #4a4a6e;
+            }
+            body.night-mode .empty-message {
+                color: #888;
+            }
         </style>
     </head>
     <body>
-        <h1>Web Notes</h1>
+        <div class="header-row">
+            <h1>Web Notes</h1>
+            <button id="btn-night" title="Toggle Night Mode">&#9681;</button>
+        </div>
         <h2>Select a notes file:</h2>
         <?php if (count($ntsFiles) > 0): ?>
             <ul class="file-list">
@@ -427,6 +482,15 @@ if ($notesParam === null) {
                         alert('Error deleting file: ' + err.message);
                     }
                 });
+            });
+
+            // Night mode
+            if (localStorage.getItem('nightMode') === 'true') {
+                document.body.classList.add('night-mode');
+            }
+            document.getElementById('btn-night').addEventListener('click', function() {
+                const isNight = document.body.classList.toggle('night-mode');
+                localStorage.setItem('nightMode', isNight);
             });
         </script>
     </body>
@@ -999,7 +1063,6 @@ if ($notesParam === null) {
             <button id="btn-save" title="Save">&#128190;</button>
             <button id="btn-find" title="Find">&#128269;</button>
             <button id="btn-new" title="New Note">&#10133;</button>
-            <button id="btn-night" title="Toggle Night Mode">&#9681;</button>
             <button id="btn-back" title="Back to Notes List">&#8592;</button>
         </div>
     </div>
@@ -1056,7 +1119,6 @@ if ($notesParam === null) {
         let saveTimer = null;
         let contextMenuTarget = null;
         let collapsedPaths = new Set();
-        let nightMode = localStorage.getItem('nightMode') === 'true';
 
         // Touch drag state
         let touchDragPath = null;
@@ -1068,7 +1130,7 @@ if ($notesParam === null) {
         let touchDragCancelled = false;
 
         // Apply night mode on load
-        if (nightMode) {
+        if (localStorage.getItem('nightMode') === 'true') {
             document.body.classList.add('night-mode');
         }
 
@@ -1517,7 +1579,7 @@ if ($notesParam === null) {
                         touchDragClone.style.opacity = '0.7';
                         touchDragClone.style.zIndex = '1000';
                         touchDragClone.style.width = div.offsetWidth + 'px';
-                        touchDragClone.style.background = nightMode ? '#2a3a5a' : '#d0e0ff';
+                        touchDragClone.style.background = document.body.classList.contains('night-mode') ? '#2a3a5a' : '#d0e0ff';
                         document.body.appendChild(touchDragClone);
                         div.style.opacity = '0.3';
                     }
@@ -2831,13 +2893,6 @@ if ($notesParam === null) {
             document.getElementById('find-status').textContent = `${findCurrentIndex + 1} of ${findMatches.length}`;
         }
 
-        // Toggle night mode
-        function toggleNightMode() {
-            nightMode = !nightMode;
-            document.body.classList.toggle('night-mode', nightMode);
-            localStorage.setItem('nightMode', nightMode);
-        }
-
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             loadNotes();
@@ -2898,6 +2953,62 @@ if ($notesParam === null) {
                 }
             });
 
+            // Multi-line indent/outdent with space/tab when selection starts at line start
+            editor.addEventListener('keydown', (e) => {
+                const isSpace = e.key === ' ' && !e.ctrlKey && !e.altKey && !e.metaKey;
+                const isTab = e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey;
+                const isShiftTab = e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey;
+
+                if (!isSpace && !isTab) return;
+
+                const selStart = editor.selectionStart;
+                const selEnd = editor.selectionEnd;
+                const text = editor.value;
+
+                // Check if selection starts at the start of a line
+                const atLineStart = selStart === 0 || text[selStart - 1] === '\n';
+                if (!atLineStart) return;
+
+                // Must have a selection for this feature
+                if (selStart === selEnd) return;
+
+                e.preventDefault();
+
+                // Get the selected text and split into lines
+                const selected = text.substring(selStart, selEnd);
+                const lines = selected.split('\n');
+
+                let newLines;
+                if (isShiftTab) {
+                    // Remove one whitespace character from each line start (if present)
+                    newLines = lines.map(line => {
+                        if (line.length > 0 && (line[0] === ' ' || line[0] === '\t')) {
+                            return line.substring(1);
+                        }
+                        return line;
+                    });
+                } else {
+                    // Prepend space or tab to each non-empty line
+                    const char = isTab ? '\t' : ' ';
+                    newLines = lines.map(line => {
+                        // Skip empty lines (only whitespace)
+                        if (/^\s*$/.test(line)) {
+                            return line;
+                        }
+                        return char + line;
+                    });
+                }
+
+                const newSelected = newLines.join('\n');
+
+                // Use execCommand to make this undo-able
+                document.execCommand('insertText', false, newSelected);
+
+                // Restore selection over the modified text
+                editor.selectionStart = selStart;
+                editor.selectionEnd = selStart + newSelected.length;
+            });
+
             editor.addEventListener('scroll', () => {
                 updateLinkHighlights();
             });
@@ -2923,10 +3034,6 @@ if ($notesParam === null) {
             document.getElementById('btn-new').addEventListener('click', () => {
                 const currentPath = tabs[activeTabIndex] || getRootPath();
                 createNote(currentPath);
-            });
-
-            document.getElementById('btn-night').addEventListener('click', () => {
-                toggleNightMode();
             });
 
             document.getElementById('btn-find').addEventListener('click', () => {
