@@ -83,6 +83,148 @@ if ($action === 'savefile') {
     exit;
 }
 
+if ($action === 'createfile') {
+    header('Content-Type: application/json');
+
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['error' => 'Method not allowed']);
+        exit;
+    }
+
+    $input = json_decode(file_get_contents('php://input'), true);
+
+    if (!isset($input['filename'])) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing filename']);
+        exit;
+    }
+
+    $filename = $input['filename'];
+
+    // Validate filename - must match note name pattern (start with letter or underscore)
+    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $filename)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid filename']);
+        exit;
+    }
+
+    $filepath = __DIR__ . '/' . $filename . '.nts';
+
+    if (file_exists($filepath)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'File already exists']);
+        exit;
+    }
+
+    // Create file with just the root note name
+    $content = json_encode(['name' => $filename], JSON_PRETTY_PRINT);
+    if (file_put_contents($filepath, $content) === false) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to create file']);
+        exit;
+    }
+
+    echo json_encode(['success' => true]);
+    exit;
+}
+
+if ($action === 'renamefile') {
+    header('Content-Type: application/json');
+
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['error' => 'Method not allowed']);
+        exit;
+    }
+
+    $input = json_decode(file_get_contents('php://input'), true);
+
+    if (!isset($input['oldname']) || !isset($input['newname'])) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing oldname or newname']);
+        exit;
+    }
+
+    $oldname = $input['oldname'];
+    $newname = $input['newname'];
+
+    // Validate filenames
+    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $oldname) || !preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $newname)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid filename']);
+        exit;
+    }
+
+    $oldpath = __DIR__ . '/' . $oldname . '.nts';
+    $newpath = __DIR__ . '/' . $newname . '.nts';
+
+    if (!file_exists($oldpath)) {
+        http_response_code(404);
+        echo json_encode(['error' => 'File not found']);
+        exit;
+    }
+
+    if (file_exists($newpath)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Target file already exists']);
+        exit;
+    }
+
+    if (!rename($oldpath, $newpath)) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to rename file']);
+        exit;
+    }
+
+    echo json_encode(['success' => true]);
+    exit;
+}
+
+if ($action === 'deletefile') {
+    header('Content-Type: application/json');
+
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['error' => 'Method not allowed']);
+        exit;
+    }
+
+    $input = json_decode(file_get_contents('php://input'), true);
+
+    if (!isset($input['filename'])) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing filename']);
+        exit;
+    }
+
+    $filename = $input['filename'];
+
+    // Validate filename
+    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $filename)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid filename']);
+        exit;
+    }
+
+    $filepath = __DIR__ . '/' . $filename . '.nts';
+
+    if (!file_exists($filepath)) {
+        http_response_code(404);
+        echo json_encode(['error' => 'File not found']);
+        exit;
+    }
+
+    if (!unlink($filepath)) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to delete file']);
+        exit;
+    }
+
+    echo json_encode(['success' => true]);
+    exit;
+}
+
 $icon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IB2cksfwAAAARnQU1BAACxjwv8YQUAAAAgY0hSTQAAeiYAAICEAAD6AAAAgOgAAHUwAADqYAAAOpgAABdwnLpRPAAAAAlwSFlzAAAuIwAALiMBeKU/dgAAAAd0SU1FB+kMHAItNCC6n/gAAAQtSURBVHja7ZtbbBRVGMd/35ntbmmFLpdFpd02pQQvbelWeDDeHrQ3lKAhClGjiTGiMdE3EROJEhNLvMT4QEQSNIRLMEoTSPpAWx/kIpqIlFJsMaVloRVLWSy9Qbsz8/lASlC5+ELS7p7/0zkzcyb5/875vjnfSUa4gYqKSqIFEf9lH1aMJomeH2LKpTExTGBNCanOmkpy5jT68yP+9+Fs8/EHm347fL3n5VoX8/LKcmdNdz8aGNZnPRVhEssIlM/Vzvm5/vJ1m9sP3RRAtLB4adDhG9cjM8OBqphLRcynJKrcHlayQjqhDY+MCr39QutpoanZ0NAcIOlBVgituc9797Pt7R9eF0B+4b1vGJHPVZHqmMfqZUmiEZ3MC4BT54R1OzNoaHYwAjXl7pYvdh5/cfy+c/XMOyKbBWTVsiRrlifJyWbSKycLnljkkRmEH9sdOv40ZS8tnpn86ei5fVcA5OWV5WYE9AdVgquWJXml0iXVtLDIJ5QB+9scTvWZR5+rmbHj55ZEwgA4Ge5aXzWrOualpPlxraxyqYz5DI8ifQmzA0CKikqinvonA0ZMw3uXJn3M30zxPqF6bSYoPBYz9xjX1ydVxVTF3JQ3D1AQUSrLPFwfDO5bBuFxgIqYT7qooswDoCeh1UaVeQCl+ekDYEHB5ZWeGJIZxsAcgEiOpg2A2eHLk31+UEJGIRsgO5Q2/q94vTgmxpDmsgAsgDSXFBQW3zD9xwp9vls1iuvDg6szSQxKagLo6tifVjNfOO8hGwLXBOB6HtWLX2Dla++kZP9/JUERQa46Cky1vs0BNgfYfYAFYAFYABaABWABWAAWwM3PAyaKysuLqfv2S1zP4/4HniKR+MueB9hawOYAC8ACsAAsAAvAArAALAALwAK4ZdXgrarCJhwAWw3aHGABpC2AQYDhkYtpY3poaHi8OWCAMwBne/vSBkBvb2K82WMQTgC0tB5PGwAtre3jzU6DUg/Q1LgvbQCMexWReuM6zi7A3dO4l/ipnpQ333XyNHsa9yrgumPObtPT0dINfJ1MutSuW5/S5lWV2tr1eJ4nKrKpu/tIjwMwbeqMQ+I4r544EQ9mZoZYtHBBSgLYsHEbW7bWAVwwytP9/X1DDsDAQGIwJxxpFVhx8OCvEgoFUwqCqrJh4zY++XQjquoj8ky869hhuOq/wQv9fb+Hp88+r6o1Bw78Im1tHZSW3kU4PG3Sx/zbq2vZsrXusnl4M951bNuVYujfA/LnliwxsF1VpwYCDlUVj1BZ9TClxXdzx50RsrOmTGjDwyMXOfPHWY4eO05T4z4amvbiuh7ABUSej3e21v+jGrzWS+bMnz8rmAysUeR1IDDJI8AV+Ep9//14vO3Mf8rhG43MyyvLDQS9peqzBNFCIArcNtF3usBpoFNE6t0xZ3d395Hrft//Bqgc3LEUIT/bAAAAAElFTkSuQmCC";
 
 $notesParam = isset($_GET['notes']) ? $_GET['notes'] : null;
@@ -90,6 +232,10 @@ $notesParam = isset($_GET['notes']) ? $_GET['notes'] : null;
 // If no notes parameter, show file listing
 if ($notesParam === null) {
     $ntsFiles = glob('*.nts');
+    // Sort by modification time (most recent first)
+    usort($ntsFiles, function($a, $b) {
+        return filemtime($b) - filemtime($a);
+    });
     ?>
     <!DOCTYPE html>
     <html lang="en">
@@ -112,9 +258,12 @@ if ($notesParam === null) {
             }
             .file-list li {
                 margin: 10px 0;
+                display: flex;
+                align-items: center;
+                gap: 8px;
             }
             .file-list a {
-                display: block;
+                flex: 1;
                 padding: 15px 20px;
                 background: #f5f5f5;
                 border-radius: 8px;
@@ -124,6 +273,27 @@ if ($notesParam === null) {
             }
             .file-list a:hover {
                 background: #e0e0e0;
+            }
+            .file-list .file-btn {
+                padding: 10px 12px;
+                font-size: 14px;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+            .file-list .btn-rename {
+                background: #f0ad4e;
+                color: white;
+            }
+            .file-list .btn-rename:hover {
+                background: #ec971f;
+            }
+            .file-list .btn-delete {
+                background: #d9534f;
+                color: white;
+            }
+            .file-list .btn-delete:hover {
+                background: #c9302c;
             }
             .new-file {
                 margin-top: 30px;
@@ -164,7 +334,11 @@ if ($notesParam === null) {
                 <?php foreach ($ntsFiles as $file):
                     $name = pathinfo($file, PATHINFO_FILENAME);
                 ?>
-                    <li><a href="?notes=<?php echo urlencode($name); ?>"><?php echo htmlspecialchars($name); ?></a></li>
+                    <li>
+                        <a href="?notes=<?php echo urlencode($name); ?>"><?php echo htmlspecialchars($name); ?></a>
+                        <button class="file-btn btn-rename" data-name="<?php echo htmlspecialchars($name); ?>" title="Rename">&#9998;</button>
+                        <button class="file-btn btn-delete" data-name="<?php echo htmlspecialchars($name); ?>" title="Delete">&#10005;</button>
+                    </li>
                 <?php endforeach; ?>
             </ul>
         <?php else: ?>
@@ -173,19 +347,86 @@ if ($notesParam === null) {
 
         <div class="new-file">
             <h3>Create new notes file:</h3>
-            <form method="get" id="createForm">
-                <input type="text" name="notes" id="newNotesName" placeholder="Enter name..." pattern="[a-zA-Z_][a-zA-Z0-9_]*" title="Notes name must be a proper identifier" required>
+            <form id="createForm">
+                <input type="text" id="newNotesName" placeholder="Enter name..." pattern="[a-zA-Z_][a-zA-Z0-9_]*" title="Notes name must be a proper identifier" required>
                 <button type="submit">Create</button>
             </form>
         </div>
         <script>
-            document.getElementById('createForm').addEventListener('submit', function(e) {
-                const name = document.getElementById('newNotesName').value;
-                const validPattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+            const validPattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+            document.getElementById('createForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const name = document.getElementById('newNotesName').value.trim();
                 if (!validPattern.test(name)) {
-                    e.preventDefault();
                     alert('Notes name must be a proper identifier.');
+                    return;
                 }
+                try {
+                    const response = await fetch('?action=createfile', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ filename: name })
+                    });
+                    const result = await response.json();
+                    if (response.ok) {
+                        document.getElementById('newNotesName').value = '';
+                        location.reload();
+                    } else {
+                        alert(result.error || 'Failed to create file');
+                    }
+                } catch (err) {
+                    alert('Error creating file: ' + err.message);
+                }
+            });
+
+            document.querySelectorAll('.btn-rename').forEach(btn => {
+                btn.addEventListener('click', async function() {
+                    const oldName = this.dataset.name;
+                    const newName = prompt('Enter new name:', oldName);
+                    if (newName === null || newName === oldName) return;
+                    if (!validPattern.test(newName)) {
+                        alert('Notes name must be a proper identifier.');
+                        return;
+                    }
+                    try {
+                        const response = await fetch('?action=renamefile', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ oldname: oldName, newname: newName })
+                        });
+                        const result = await response.json();
+                        if (response.ok) {
+                            location.reload();
+                        } else {
+                            alert(result.error || 'Failed to rename file');
+                        }
+                    } catch (err) {
+                        alert('Error renaming file: ' + err.message);
+                    }
+                });
+            });
+
+            document.querySelectorAll('.btn-delete').forEach(btn => {
+                btn.addEventListener('click', async function() {
+                    const name = this.dataset.name;
+                    if (!confirm('Delete "' + name + '"?')) return;
+                    try {
+                        const response = await fetch('?action=deletefile', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ filename: name })
+                        });
+                        const result = await response.json();
+                        if (response.ok) {
+                            location.reload();
+                        } else {
+                            alert(result.error || 'Failed to delete file');
+                        }
+                    } catch (err) {
+                        alert('Error deleting file: ' + err.message);
+                    }
+                });
             });
         </script>
     </body>
@@ -755,9 +996,9 @@ if ($notesParam === null) {
     <div id="sidebar">
         <div id="hierarchy"></div>
         <div id="sidebar-buttons">
+            <button id="btn-save" title="Save">&#128190;</button>
             <button id="btn-find" title="Find">&#128269;</button>
             <button id="btn-new" title="New Note">&#10133;</button>
-            <button id="btn-save" title="Save">&#128190;</button>
             <button id="btn-night" title="Toggle Night Mode">&#9681;</button>
             <button id="btn-back" title="Back to Notes List">&#8592;</button>
         </div>
