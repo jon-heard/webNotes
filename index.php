@@ -13,8 +13,8 @@ if ($action === 'loadfile') {
 
     $filename = isset($_GET['filename']) ? $_GET['filename'] : 'default';
 
-    // Validate filename - only allow alphanumeric and underscores, no path traversal
-    if (!preg_match('/^[a-zA-Z0-9_]+$/', $filename)) {
+    // Validate filename - must match note name pattern (start with letter or underscore)
+    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $filename)) {
         http_response_code(400);
         echo json_encode(['error' => 'Invalid filename']);
         exit;
@@ -24,10 +24,9 @@ if ($action === 'loadfile') {
 
     if (!file_exists($filepath)) {
         // Return default empty structure if file doesn't exist
+        // Use the filename as the root note name
         echo json_encode([
-            'name' => 'root',
-            'text' => '',
-            'children' => []
+            'name' => $filename
         ]);
         exit;
     }
@@ -65,8 +64,8 @@ if ($action === 'savefile') {
     $filename = $input['filename'];
     $content = $input['content'];
 
-    // Validate filename - only allow alphanumeric and underscores, no path traversal
-    if (!preg_match('/^[a-zA-Z0-9_]+$/', $filename)) {
+    // Validate filename - must match note name pattern (start with letter or underscore)
+    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $filename)) {
         http_response_code(400);
         echo json_encode(['error' => 'Invalid filename']);
         exit;
@@ -174,11 +173,21 @@ if ($notesParam === null) {
 
         <div class="new-file">
             <h3>Create new notes file:</h3>
-            <form method="get">
-                <input type="text" name="notes" placeholder="Enter name..." pattern="[a-zA-Z0-9_]+" required>
+            <form method="get" id="createForm">
+                <input type="text" name="notes" id="newNotesName" placeholder="Enter name..." pattern="[a-zA-Z_][a-zA-Z0-9_]*" title="Notes name must be a proper identifier" required>
                 <button type="submit">Create</button>
             </form>
         </div>
+        <script>
+            document.getElementById('createForm').addEventListener('submit', function(e) {
+                const name = document.getElementById('newNotesName').value;
+                const validPattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+                if (!validPattern.test(name)) {
+                    e.preventDefault();
+                    alert('Notes name must be a proper identifier.');
+                }
+            });
+        </script>
     </body>
     </html>
     <?php
@@ -965,6 +974,35 @@ if ($notesParam === null) {
             }
         }
 
+        // Clean note data for saving - remove empty text and empty children arrays
+        function cleanNoteForSave(note) {
+            const cleaned = { name: note.name };
+
+            // Only include text if non-empty after trimming
+            if (note.text && note.text.trim() !== '') {
+                cleaned.text = note.text;
+            }
+
+            // Recursively clean children
+            if (note.children && note.children.length > 0) {
+                const cleanedChildren = note.children.map(child => cleanNoteForSave(child));
+                cleaned.children = cleanedChildren;
+            }
+
+            return cleaned;
+        }
+
+        // Normalize note data after loading - ensure text and children properties exist
+        function normalizeNote(note) {
+            if (typeof note.text !== 'string') {
+                note.text = '';
+            }
+            if (!Array.isArray(note.children)) {
+                note.children = [];
+            }
+            note.children.forEach(child => normalizeNote(child));
+        }
+
         // Save notes to file
         async function saveNotes() {
             if (saveTimer) {
@@ -973,12 +1011,13 @@ if ($notesParam === null) {
             }
 
             try {
+                const cleanedData = cleanNoteForSave(notesData);
                 const response = await fetch('?action=savefile', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         filename: getNotesFilename(),
-                        content: JSON.stringify(notesData, null, 2)
+                        content: JSON.stringify(cleanedData, null, 2)
                     })
                 });
 
@@ -1000,6 +1039,7 @@ if ($notesParam === null) {
                 const response = await fetch(`?action=loadfile&filename=${encodeURIComponent(getNotesFilename())}`);
                 if (response.ok) {
                     notesData = await response.json();
+                    normalizeNote(notesData);
                     if (tabs.length === 0) {
                         addTab(getRootPath());
                     } else {
@@ -2571,6 +2611,49 @@ if ($notesParam === null) {
                     markDirty();
                     updateLinkHighlights();
                     invalidateSearch(); // Content changed, reset search
+                }
+            });
+
+            // Copy scaffolding when pressing Enter
+            editor.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                    const cursorPos = editor.selectionStart;
+                    const text = editor.value;
+
+                    // Find the start of the current line
+                    let lineStart = cursorPos;
+                    while (lineStart > 0 && text[lineStart - 1] !== '\n') {
+                        lineStart--;
+                    }
+
+                    // Extract the current line up to cursor
+                    const currentLine = text.substring(lineStart, cursorPos);
+
+                    // Match scaffolding: spaces, tabs, dashes, equals, numbers, periods, closing parens, closing angle brackets
+                    const scaffoldingMatch = currentLine.match(/^[ \t\-=0-9.)>]*/);
+                    let scaffolding = scaffoldingMatch ? scaffoldingMatch[0] : '';
+
+                    // Increment any number clusters in the scaffolding
+                    scaffolding = scaffolding.replace(/\d+/g, match => String(parseInt(match, 10) + 1));
+
+                    if (scaffolding.length > 0) {
+                        e.preventDefault();
+
+                        // Insert newline + scaffolding
+                        const before = text.substring(0, cursorPos);
+                        const after = text.substring(editor.selectionEnd);
+                        const insertion = '\n' + scaffolding;
+
+                        editor.value = before + insertion + after;
+
+                        // Position cursor after the scaffolding
+                        const newPos = cursorPos + insertion.length;
+                        editor.selectionStart = newPos;
+                        editor.selectionEnd = newPos;
+
+                        // Trigger input event to save changes
+                        editor.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
                 }
             });
 
