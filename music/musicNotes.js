@@ -26,7 +26,7 @@ window.MusicNotes.mount = function(editorElement, host) {
             .music-notes-roll { height: 100%; overflow: hidden; cursor: crosshair; touch-action: none; overscroll-behavior: contain; }
             .music-notes-roll.panning { cursor: grabbing; }
             .music-notes-keys { position: relative; height: 100%; }
-            .music-notes-key { position: absolute; top: 0; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 7px; cursor: pointer; }
+            .music-notes-key { position: absolute; top: 0; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 7px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
             .music-notes-white-key { z-index: 1; width: var(--white-key); height: 100%; border: 0; border-right: 1px solid #888; border-bottom: 1px solid #888; box-shadow: inset 0 1px #888; border-radius: 0 0 3px 3px; background: linear-gradient(to bottom, #c8c8c8 0 22%, #eee 22% 100%); color: #555; }
             .music-notes-keys > .music-notes-white-key:first-child { border-left: 1px solid #888; }
             .music-notes-black-key { z-index: 2; width: var(--black-key); height: 66%; border: 1px solid #111; border-radius: 0 0 3px 3px; background: #17181a; color: #ddd; }
@@ -63,7 +63,7 @@ window.MusicNotes.mount = function(editorElement, host) {
                     <option value="3/2">3/2</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
                 </select>
             </div>
-            <div class="music-notes-cluster music-notes-revision" aria-label="Revision 4">R.4</div>
+            <div class="music-notes-cluster music-notes-revision" aria-label="Revision 5">R.5</div>
         </div>
         <div class="music-notes-roll-frame"><div id="roll" class="music-notes-roll" aria-label="Piano keyboard" tabindex="0"><div id="keys" class="music-notes-keys"></div></div></div>
     </section>`;

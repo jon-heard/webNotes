@@ -260,6 +260,7 @@ if ($notesParam === null) {
         <meta charset="UTF-8">
 	<link rel="icon" type="image/png" href="./icon.png" />
         <link rel="manifest" href="./manifest.webmanifest">
+        <meta name="color-scheme" content="light">
         <meta name="theme-color" content="#4080ff">
         <style>
             body {
