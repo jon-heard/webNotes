@@ -8,7 +8,7 @@
         :root { color-scheme: dark; --white-key: 48px; --black-key: 30px; --dock-height: 164px; }
         * { box-sizing: border-box; }
         html, body { width: 100%; height: 100%; margin: 0; }
-        body { display: flex; flex-direction: column; overflow: hidden; background: #202124; color: #eee; font: 14px system-ui, sans-serif; }
+        body { display: flex; flex-direction: column; overflow: hidden; height: 100dvh; background: #202124; color: #eee; font: 14px system-ui, sans-serif; }
         .editor-area { flex: 1; min-height: 0; }
         #abc-text { display: block; width: 100%; height: 100%; min-height: 0; padding: 14px; resize: none; border: 0; outline: 0; background: #303134; color: #fff; font: 15px/1.55 ui-monospace, "Cascadia Code", Consolas, monospace; tab-size: 2; }
         #abc-text::selection { background: #655b2c; color: #fff; }
@@ -23,6 +23,7 @@
         .slider input { flex: none; width: 76px; accent-color: #e4c64c; }
         .slider output { min-width: 28px; color: #aaa; font: 10px ui-monospace, monospace; }
         .transport button.active { background: #8a2929; border-color: #d66; color: white; }
+        .revision { color: #aaa; font: 11px ui-monospace, monospace; padding: 0 4px; }
         .transport .duration.flash { animation: duration-flash .18s ease-in-out 2 alternate; }
         @keyframes duration-flash { to { background: #f1d34a; color: #332900; border-color: #ffe985; } }
         .roll-frame { position: relative; height: calc(var(--dock-height) - 44px); }
@@ -35,6 +36,7 @@
         .black-keyboard-key { z-index: 2; width: var(--black-key); height: 66%; border: 1px solid #111; border-radius: 0 0 3px 3px; background: #17181a; color: #ddd; }
         .key-label { pointer-events: none; font: 10px ui-monospace, monospace; }
         .key.pressed { z-index: 3; background: #f1d34a; color: #332900; border-color: #ffe985; box-shadow: 0 0 10px #e4c64c; }
+        body.keyboard-open-landscape .roll-frame { display: none; }
     </style>
 </head>
 <body>
@@ -73,6 +75,7 @@ Q: 1/4=120
                     <option value="3/2">3/2</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
                 </select>
             </div>
+            <div class="control-cluster revision" aria-label="Revision 2">R.2</div>
         </div>
         <div class="roll-frame"><div id="roll" class="roll" aria-label="Piano keyboard" tabindex="0"><div id="keys" class="keys"></div></div></div>
     </section>
@@ -100,7 +103,7 @@ Q: 1/4=120
             const midiSamples = new Map(), sampleFiles = new Map(), decodedSamples = new Map(), activeVoices = new Map(), keyVoiceCounts = new Map(), pointerStates = new Map();
             let audioContext = null, compressor = null, nextVoice = 1, whiteCount = 0;
             let sampleArchivePromise = null;
-            let events = [], preparedText = '', totalMs = 0, metronomeBeatMs = 500, abcQpm = 120, abcUnitLength = 1 / 8, playbackState = 'stopped', playbackElapsed = 0, playbackStartedAt = 0, playbackRate = 1, playbackRun = 0, selectedEvent = -1, recording = false, metronomeEnabled = false, historyMutation = false;
+            let events = [], preparedText = '', totalMs = 0, metronomeBeatMs = 500, abcQpm = 120, abcUnitLength = 1 / 8, playbackState = 'stopped', playbackElapsed = 0, playbackStartedAt = 0, playbackRate = 1, playbackRun = 0, recording = false, metronomeEnabled = false, historyMutation = false;
             let playbackTimers = new Set(), metronomeTimers = new Set(), playbackVoices = new Set(), previewVoices = new Set(), previewTimers = new Set();
             const recordedEdits = [];
             const recordedAccidentals = new Map();
@@ -251,17 +254,12 @@ Q: 1/4=120
             function clearTimers(timers) { for (const id of timers) clearTimeout(id); timers.clear(); }
             function updatePlaybackControl() {
                 const playing = playbackState === 'playing';
-                playPauseButton.textContent = playing ? 'Ⅱ' : '▶';
+                playPauseButton.textContent = playing ? '🐾' : '⯈';
                 playPauseButton.title = playing ? 'Pause' : 'Play';
                 playPauseButton.setAttribute('aria-label', playing ? 'Pause' : 'Play');
             }
             function stopPlaybackVoices() { for (const id of playbackVoices) stopNote(id); playbackVoices.clear(); }
             function stopPreview() { clearTimers(previewTimers); for (const id of previewVoices) stopNote(id); previewVoices.clear(); }
-            function selectEvent(index) {
-                selectedEvent = index;
-                const item = events[index];
-                if (item) editor.setSelectionRange(item.startChar, item.endChar);
-            }
             function updateMetronomeBeat() {
                 const [numerator, denominator = 1] = beatFrequency.value.split('/').map(Number);
                 const multiplier = numerator / denominator;
@@ -289,7 +287,7 @@ Q: 1/4=120
                     events = [...grouped.values()].sort((a, b) => a.startMs - b.startMs).map((event, index) => ({ ...event, index }));
                     if (!events.length) throw new Error('No playable notes found in the ABC tune.');
                     preparedText = source; totalMs = Math.max(Number(midi.totalDuration) * msPerWhole, ...events.map(event => event.endMs));
-                    playbackElapsed = 0; selectedEvent = -1;
+                    playbackElapsed = 0;
                     return true;
                 } catch (error) {
                     events = []; preparedText = ''; return false;
@@ -316,7 +314,7 @@ Q: 1/4=120
                 for (const event of events) for (let pitchIndex = 0; pitchIndex < event.notes.length; pitchIndex++) {
                     const pitch = event.notes[pitchIndex], id = `play-${run}-${event.index}-${pitchIndex}`;
                     if (event.endMs <= playbackElapsed) continue;
-                    later(() => { selectEvent(event.index); const voice = playNote(pitch.midi, id, pitch.velocity); if (voice !== null) playbackVoices.add(id); }, (event.startMs - playbackElapsed) / rate, run);
+                    later(() => { const voice = playNote(pitch.midi, id, pitch.velocity); if (voice !== null) playbackVoices.add(id); }, (event.startMs - playbackElapsed) / rate, run);
                     later(() => { stopNote(id); playbackVoices.delete(id); }, (event.endMs - playbackElapsed) / rate, run);
                 }
                 scheduleMetronome(playbackElapsed, run, rate);
@@ -332,7 +330,6 @@ Q: 1/4=120
                     const next = events.find(event => event.endChar >= cursor) || events[0];
                     playbackElapsed = next.startMs;
                 } else if (playbackElapsed >= totalMs) playbackElapsed = 0;
-                editor.focus({ preventScroll: true });
                 startFrom(playbackElapsed);
             }
             function pause() {
@@ -342,7 +339,7 @@ Q: 1/4=120
             }
             function stop() {
                 playbackRun++; clearTimers(playbackTimers); clearTimers(metronomeTimers); stopPlaybackVoices(); stopPreview();
-                playbackState = 'stopped'; updatePlaybackControl(); playbackElapsed = 0; selectedEvent = -1;
+                playbackState = 'stopped'; updatePlaybackControl(); playbackElapsed = 0;
                 editor.setSelectionRange(0, 0);
             }
             function metronomeClick() {
@@ -388,7 +385,6 @@ Q: 1/4=120
                 historyMutation = true;
                 editor.dispatchEvent(new Event('input', { bubbles: true }));
                 historyMutation = false;
-                editor.focus({ preventScroll: true });
             }
             function undoRecordedNote() {
                 const edit = recordedEdits.pop();
@@ -402,7 +398,6 @@ Q: 1/4=120
                     historyMutation = true;
                     editor.dispatchEvent(new Event('input', { bubbles: true }));
                     historyMutation = false;
-                    editor.focus({ preventScroll: true });
                 }
                 document.getElementById('undo-record').disabled = recordedEdits.length === 0;
             }
@@ -429,7 +424,6 @@ Q: 1/4=120
             }
             function previewEvent(index) {
                 const event = events[index]; if (!event) return;
-                selectEvent(index);
                 for (let i = 0; i < event.notes.length; i++) {
                     const id = `preview-${nextVoice++}`, voice = playNote(event.notes[i].midi, id, event.notes[i].velocity);
                     if (voice !== null) {
@@ -451,8 +445,26 @@ Q: 1/4=120
                 pointerStates.delete(pointerId);
                 if (!pointerStates.size) roll.classList.remove('panning');
             }
+            function updateKeyboardLayout() {
+                const viewport = window.visualViewport;
+                const keyboardOpen = editor === document.activeElement && viewport && window.innerHeight - viewport.height > 120;
+                document.body.classList.toggle('keyboard-open-landscape', Boolean(keyboardOpen && matchMedia('(orientation: landscape)').matches));
+                if (keyboardOpen && matchMedia('(orientation: portrait)').matches) {
+                    document.body.style.height = `${viewport.height}px`;
+                } else {
+                    document.body.style.removeProperty('height');
+                }
+            }
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', updateKeyboardLayout);
+                window.visualViewport.addEventListener('scroll', updateKeyboardLayout);
+                window.addEventListener('orientationchange', updateKeyboardLayout);
+                editor.addEventListener('focus', updateKeyboardLayout);
+                editor.addEventListener('blur', () => requestAnimationFrame(updateKeyboardLayout));
+            }
             roll.addEventListener('pointerdown', event => {
                 if (event.button !== 0) return;
+                editor.blur();
                 const rect = roll.getBoundingClientRect(), y = event.clientY - rect.top;
                 const key = keyAtPoint(event.clientX, event.clientY);
                 if (!key && y > roll.clientHeight * 0.22) return;
@@ -558,7 +570,7 @@ Q: 1/4=120
                     document.getElementById('undo-record').disabled = true;
                 }
                 playbackRun++; clearTimers(playbackTimers); clearTimers(metronomeTimers); stopPlaybackVoices(); stopPreview();
-                playbackState = 'stopped'; updatePlaybackControl(); playbackElapsed = 0; selectedEvent = -1;
+                playbackState = 'stopped'; updatePlaybackControl(); playbackElapsed = 0;
                 preparedText = ''; events = [];
             });
 
