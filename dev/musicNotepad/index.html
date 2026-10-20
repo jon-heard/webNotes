@@ -79,12 +79,11 @@ Q: 1/4=120
     </section>
 
     <script src="./abc.min.js"></script>
-    <script src="./audio.js"></script>
+    <script src="./fflate.min.js"></script>
     <script>
         (() => {
             'use strict';
 
-            const soundfont = window.MIDI?.Soundfont?.acoustic_grand_piano;
             const editor = document.getElementById('abc-text');
             const keysElement = document.getElementById('keys');
             const roll = document.getElementById('roll');
@@ -99,8 +98,9 @@ Q: 1/4=120
             const minMidi = 21, maxMidi = 108;
             const whitePitches = new Set([0, 2, 4, 5, 7, 9, 11]);
             const noteNames = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
-            const midiSamples = new Map(), decodedSamples = new Map(), activeVoices = new Map(), keyVoiceCounts = new Map(), pointerStates = new Map();
+            const midiSamples = new Map(), sampleFiles = new Map(), decodedSamples = new Map(), activeVoices = new Map(), keyVoiceCounts = new Map(), pointerStates = new Map();
             let audioContext = null, compressor = null, nextVoice = 1, whiteCount = 0;
+            let sampleArchivePromise = null;
             let events = [], preparedText = '', totalMs = 0, metronomeBeatMs = 500, abcQpm = 120, abcUnitLength = 1 / 8, playbackState = 'stopped', playbackElapsed = 0, playbackStartedAt = 0, playbackRate = 1, playbackRun = 0, selectedEvent = -1, recording = false, metronomeEnabled = false, historyMutation = false;
             let playbackTimers = new Set(), metronomeTimers = new Set(), playbackVoices = new Set(), previewVoices = new Set(), previewTimers = new Set();
             const recordedEdits = [];
@@ -132,13 +132,28 @@ Q: 1/4=120
                 if (Number.isInteger(note)) return note;
                 return typeof note === 'string' ? midiFromName(note.replace('♯', '#').replace('♭', 'b')) : null;
             }
-            if (soundfont) for (const name of Object.keys(soundfont)) {
-                const midi = midiFromName(name);
-                if (midi !== null) midiSamples.set(midi, name);
+            function loadSampleArchive() {
+                if (!sampleArchivePromise) {
+                    sampleArchivePromise = fetch('./samples_piano.zip').then(response => {
+                        if (!response.ok) throw new Error(`Could not load piano samples (${response.status}).`);
+                        return response.arrayBuffer();
+                    }).then(buffer => {
+                        if (!window.fflate?.unzipSync) throw new Error('fflate ZIP support is unavailable.');
+                        const entries = window.fflate.unzipSync(new Uint8Array(buffer));
+                        for (const [path, bytes] of Object.entries(entries)) {
+                            const filename = path.split('/').pop();
+                            if (!filename?.toLowerCase().endsWith('.ogg')) continue;
+                            const name = filename.slice(0, -4), midi = midiFromName(name);
+                            if (midi !== null) { sampleFiles.set(name, bytes); midiSamples.set(midi, name); }
+                        }
+                        if (!sampleFiles.size) throw new Error('No piano OGG samples were found in samples_piano.zip.');
+                        return sampleFiles;
+                    }).catch(error => { sampleArchivePromise = null; throw error; });
+                }
+                return sampleArchivePromise;
             }
 
             function buildKeyboard() {
-                if (!soundfont) return;
                 const whites = document.createDocumentFragment(), blacks = document.createDocumentFragment(), positions = new Map();
                 for (let midi = minMidi; midi <= maxMidi; midi++) if (whitePitches.has(midi % 12)) {
                     const key = document.createElement('div');
@@ -181,7 +196,12 @@ Q: 1/4=120
             }
             function decodeSample(name) {
                 if (!decodedSamples.has(name)) {
-                    const loading = fetch(soundfont[name]).then(response => response.arrayBuffer()).then(data => getAudioContext().decodeAudioData(data));
+                    const loading = loadSampleArchive().then(() => {
+                        const bytes = sampleFiles.get(name);
+                        if (!bytes) throw new Error(`Piano sample ${name}.ogg was not found.`);
+                        const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+                        return getAudioContext().decodeAudioData(data);
+                    });
                     decodedSamples.set(name, loading); loading.catch(() => decodedSamples.delete(name));
                 }
                 return decodedSamples.get(name);
@@ -189,15 +209,17 @@ Q: 1/4=120
             function playNote(note, voiceId, velocity = 127) {
                 const midi = midiFor(note);
                 if (!Number.isInteger(midi) || midi < minMidi || midi > maxMidi) return null;
-                const sample = midiSamples.get(midi);
-                if (!sample) return null;
                 voiceId ??= `voice-${nextVoice++}`;
                 if (activeVoices.has(voiceId)) stopNote(voiceId);
                 const voice = { midi, source: null, gain: null, released: false };
                 activeVoices.set(voiceId, voice); setKeyGlow(midi, true);
                 try {
                     getAudioContext();
-                    decodeSample(sample).then(buffer => {
+                    loadSampleArchive().then(() => {
+                        const sample = midiSamples.get(midi);
+                        if (!sample) throw new Error(`No piano sample is mapped for MIDI note ${midi}.`);
+                        return decodeSample(sample);
+                    }).then(buffer => {
                         if (voice.released || activeVoices.get(voiceId) !== voice) return;
                         const source = audioContext.createBufferSource(), gain = audioContext.createGain();
                         source.buffer = buffer; gain.gain.value = Number(volume.value) * Math.max(0, Number(velocity) / 127);
@@ -542,6 +564,7 @@ Q: 1/4=120
                 range: Object.freeze({ min: minMidi, max: maxMidi }), abcjs: window.ABCJS || null
             });
             buildKeyboard();
+            loadSampleArchive().catch(error => console.error(error));
         })();
     </script>
 </body>
