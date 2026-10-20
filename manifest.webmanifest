@@ -9,10 +9,11 @@
   "theme_color": "#4080ff",
   "icons": [
     {
-      "src": "./notes-icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "./icon.png",
+      "sizes": "64x64",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }
+

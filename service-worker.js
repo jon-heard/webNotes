@@ -1,5 +1,5 @@
-const CACHE_NAME = 'web-notes-shell-v1';
-const SHELL_FILES = ['./', './manifest.webmanifest', './notes-icon.svg'];
+const CACHE_NAME = 'web-notes-shell-v2';
+const SHELL_FILES = ['./', './manifest.webmanifest', './icon.png'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL_FILES)));
@@ -39,7 +39,8 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  if (url.pathname.endsWith('/manifest.webmanifest') || url.pathname.endsWith('/notes-icon.svg')) {
+  if (url.pathname.endsWith('/manifest.webmanifest') || url.pathname.endsWith('/icon.png')) {
     event.respondWith(caches.match(request).then(cached => cached || fetch(request)));
   }
 });
+

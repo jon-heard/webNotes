@@ -240,7 +240,7 @@ if ($action === 'deletefile') {
     exit;
 }
 
-$icon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IB2cksfwAAAARnQU1BAACxjwv8YQUAAAAgY0hSTQAAeiYAAICEAAD6AAAAgOgAAHUwAADqYAAAOpgAABdwnLpRPAAAAAlwSFlzAAAuIwAALiMBeKU/dgAAAAd0SU1FB+kMHAItNCC6n/gAAAQtSURBVHja7ZtbbBRVGMd/35ntbmmFLpdFpd02pQQvbelWeDDeHrQ3lKAhClGjiTGiMdE3EROJEhNLvMT4QEQSNIRLMEoTSPpAWx/kIpqIlFJsMaVloRVLWSy9Qbsz8/lASlC5+ELS7p7/0zkzcyb5/875vjnfSUa4gYqKSqIFEf9lH1aMJomeH2LKpTExTGBNCanOmkpy5jT68yP+9+Fs8/EHm347fL3n5VoX8/LKcmdNdz8aGNZnPRVhEssIlM/Vzvm5/vJ1m9sP3RRAtLB4adDhG9cjM8OBqphLRcynJKrcHlayQjqhDY+MCr39QutpoanZ0NAcIOlBVgituc9797Pt7R9eF0B+4b1vGJHPVZHqmMfqZUmiEZ3MC4BT54R1OzNoaHYwAjXl7pYvdh5/cfy+c/XMOyKbBWTVsiRrlifJyWbSKycLnljkkRmEH9sdOv40ZS8tnpn86ei5fVcA5OWV5WYE9AdVgquWJXml0iXVtLDIJ5QB+9scTvWZR5+rmbHj55ZEwgA4Ge5aXzWrOualpPlxraxyqYz5DI8ifQmzA0CKikqinvonA0ZMw3uXJn3M30zxPqF6bSYoPBYz9xjX1ydVxVTF3JQ3D1AQUSrLPFwfDO5bBuFxgIqYT7qooswDoCeh1UaVeQCl+ekDYEHB5ZWeGJIZxsAcgEiOpg2A2eHLk31+UEJGIRsgO5Q2/q94vTgmxpDmsgAsgDSXFBQW3zD9xwp9vls1iuvDg6szSQxKagLo6tifVjNfOO8hGwLXBOB6HtWLX2Dla++kZP9/JUERQa46Cky1vs0BNgfYfYAFYAFYABaABWABWAAWwM3PAyaKysuLqfv2S1zP4/4HniKR+MueB9hawOYAC8ACsAAsAAvAArAALAALwAK4ZdXgrarCJhwAWw3aHGABpC2AQYDhkYtpY3poaHi8OWCAMwBne/vSBkBvb2K82WMQTgC0tB5PGwAtre3jzU6DUg/Q1LgvbQCMexWReuM6zi7A3dO4l/ipnpQ333XyNHsa9yrgumPObtPT0dINfJ1MutSuW5/S5lWV2tr1eJ4nKrKpu/tIjwMwbeqMQ+I4r544EQ9mZoZYtHBBSgLYsHEbW7bWAVwwytP9/X1DDsDAQGIwJxxpFVhx8OCvEgoFUwqCqrJh4zY++XQjquoj8ky869hhuOq/wQv9fb+Hp88+r6o1Bw78Im1tHZSW3kU4PG3Sx/zbq2vZsrXusnl4M951bNuVYujfA/LnliwxsF1VpwYCDlUVj1BZ9TClxXdzx50RsrOmTGjDwyMXOfPHWY4eO05T4z4amvbiuh7ABUSej3e21v+jGrzWS+bMnz8rmAysUeR1IDDJI8AV+Ep9//14vO3Mf8rhG43MyyvLDQS9peqzBNFCIArcNtF3usBpoFNE6t0xZ3d395Hrft//Bqgc3LEUIT/bAAAAAElFTkSuQmCC";
+
 
 $notesParam = isset($_GET['notes']) ? $_GET['notes'] : null;
 
@@ -258,7 +258,7 @@ if ($notesParam === null) {
         <title>Web Notes - Select Notes File</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta charset="UTF-8">
-	<link rel="icon" type="image/x-icon" href="<?php echo($icon) ?>" />
+	<link rel="icon" type="image/png" href="./icon.png" />
         <link rel="manifest" href="./manifest.webmanifest">
         <meta name="theme-color" content="#4080ff">
         <style>
@@ -527,7 +527,7 @@ if ($notesParam === null) {
     <title>Web Notes</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta charset="UTF-8">
-    <link rel="icon" type="image/x-icon" href="<?php echo($icon) ?>" />
+    <link rel="icon" type="image/png" href="./icon.png" />
     <link rel="manifest" href="./manifest.webmanifest">
     <meta name="theme-color" content="#4080ff">
     <style>
