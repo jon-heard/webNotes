@@ -650,6 +650,10 @@ if ($notesParam === null) {
             background: #404040;
         }
 
+        body.night-mode .tab-menu-separator {
+            background: #555;
+        }
+
         body.night-mode .context-item:hover {
             background: #404040;
         }
@@ -924,6 +928,16 @@ if ($notesParam === null) {
             min-height: 0;
         }
 
+        #music-editor-host:not([hidden]) {
+            flex: none;
+        }
+
+        .tab-menu-separator {
+            height: 1px;
+            background: #ddd;
+            margin: 4px 0;
+        }
+
         #editor {
             flex: 1;
             width: 100%;
@@ -1190,6 +1204,7 @@ if ($notesParam === null) {
         <div id="editor-container">
             <textarea id="editor"></textarea>
             <div id="link-overlay"></div>
+            <div id="music-editor-host" hidden></div>
         </div>
         <div id="find-bar" style="display: none;">
             <div id="find-row">
@@ -1235,6 +1250,9 @@ if ($notesParam === null) {
                 <div class="tab-menu-item" data-tab-action="close-right">close all to right</div>
             </div>
         </div>
+        <div class="tab-menu-separator"></div>
+        <div class="tab-menu-item" data-tab-action="open-music">Open music editor</div>
+        <div class="tab-menu-item" data-tab-action="close-music">Close music editor</div>
     </div>
 
     <script>
@@ -1242,6 +1260,10 @@ if ($notesParam === null) {
         let notesData = { name: 'root', text: '', children: [] };
         let tabs = [];
         let tabStates = []; // Stores {scrollTop, selectionStart, selectionEnd} for each tab
+        let musicEditorOpenByTab = [];
+        let musicNotesLoading = null;
+        let musicNotesController = null;
+        let musicEditorViewToken = 0;
         let activeTabIndex = 0;
         let isDirty = false;
         let saveTimer = null;
@@ -1960,8 +1982,10 @@ if ($notesParam === null) {
                         renderTabs();
                         updateEditor();
                     } else {
-                        // Re-focus editor without losing caret/selection
-                        document.getElementById('editor').focus();
+                        // Keep the virtual keyboard closed while this tab's piano roll is open.
+                        const editor = document.getElementById('editor');
+                        if (musicEditorOpenByTab[index]) editor.blur();
+                        else editor.focus();
                     }
                 });
 
@@ -1978,6 +2002,9 @@ if ($notesParam === null) {
             const menu = document.getElementById('tab-context-menu');
             menu.classList.remove('submenu-left');
             menu.querySelector('.tab-menu-parent').classList.remove('open');
+            const musicOpen = musicEditorOpenByTab[index] === true;
+            menu.querySelector('[data-tab-action="open-music"]').style.display = musicOpen ? 'none' : '';
+            menu.querySelector('[data-tab-action="close-music"]').style.display = musicOpen ? '' : 'none';
             menu.style.left = x + 'px';
             menu.style.top = y + 'px';
             menu.style.display = 'block';
@@ -1995,11 +2022,85 @@ if ($notesParam === null) {
             document.getElementById('tab-context-menu').style.display = 'none';
         }
 
+        function loadMusicScript(src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = () => reject(new Error(`Could not load ${src}`));
+                document.head.appendChild(script);
+            });
+        }
+
+        function ensureMusicNotesLoaded() {
+            if (!musicNotesLoading) {
+                const musicBase = new URL('./music/', window.location.href);
+                musicNotesLoading = (async () => {
+                    if (!window.ABCJS) await loadMusicScript(new URL('abc.min.js', musicBase));
+                    if (!window.fflate?.unzipSync) await loadMusicScript(new URL('fflate.min.js', musicBase));
+                    if (!window.MusicNotes?.mount) await loadMusicScript(new URL('musicNotes.js', musicBase));
+                    const controller = window.MusicNotes.mount(document.getElementById('editor'), document.getElementById('music-editor-host'));
+                    await controller.loadSamples();
+                    musicNotesController = controller;
+                    return musicNotesController;
+                })().catch(error => {
+                    musicNotesLoading = null;
+                    throw error;
+                });
+            }
+            return musicNotesLoading;
+        }
+
+        function syncMusicEditor() {
+            const host = document.getElementById('music-editor-host');
+            const shouldOpen = musicEditorOpenByTab[activeTabIndex] === true;
+            const viewToken = ++musicEditorViewToken;
+            host.hidden = !shouldOpen || !musicNotesController;
+            if (musicNotesController) {
+                if (shouldOpen) musicNotesController.refresh();
+                else musicNotesController.suspend();
+            }
+            if (!shouldOpen) return;
+
+            const requestedTab = activeTabIndex;
+            ensureMusicNotesLoaded().then(controller => {
+                if (viewToken !== musicEditorViewToken || requestedTab !== activeTabIndex || musicEditorOpenByTab[requestedTab] !== true) {
+                    controller.suspend();
+                    return;
+                }
+                host.hidden = false;
+                controller.refresh();
+            }).catch(error => {
+                console.error('Could not open music editor:', error);
+                if (requestedTab === activeTabIndex) {
+                    musicEditorOpenByTab[requestedTab] = false;
+                    host.hidden = true;
+                    alert('The music editor could not be loaded. Check the browser console for details.');
+                }
+            });
+        }
+
+        function setMusicEditorOpen(index, isOpen) {
+            musicEditorOpenByTab[index] = isOpen;
+            if (isOpen && index === activeTabIndex) document.getElementById('editor').blur();
+            if (isOpen && activeTabIndex !== index) {
+                saveTabState();
+                activeTabIndex = index;
+                if (!findAllNotes) invalidateSearch();
+                renderHierarchy();
+                renderTabs();
+                updateEditor();
+                return;
+            }
+            if (index === activeTabIndex) syncMusicEditor();
+        }
+
         // Add new tab
         function addTab(path) {
             saveTabState();
             tabs.push(path);
             tabStates.push(null);
+            musicEditorOpenByTab.push(false);
             activeTabIndex = tabs.length - 1;
             // Invalidate search when adding a new tab with "all notes" off
             if (!findAllNotes) {
@@ -2014,6 +2115,7 @@ if ($notesParam === null) {
         function closeTab(index) {
             tabs.splice(index, 1);
             tabStates.splice(index, 1);
+            musicEditorOpenByTab.splice(index, 1);
             if (tabs.length === 0) {
                 addTab(getRootPath());
             } else {
@@ -2038,11 +2140,12 @@ if ($notesParam === null) {
             saveTabState();
             const oldActiveIndex = activeTabIndex;
             const keptEntries = tabs
-                .map((path, index) => ({ path, state: tabStates[index], index }))
+                .map((path, index) => ({ path, state: tabStates[index], musicOpen: musicEditorOpenByTab[index], index }))
                 .filter(entry => !closeSet.has(entry.index));
 
             tabs = keptEntries.map(entry => entry.path);
             tabStates = keptEntries.map(entry => entry.state);
+            musicEditorOpenByTab = keptEntries.map(entry => entry.musicOpen);
 
             if (tabs.length === 0) {
                 activeTabIndex = 0;
@@ -2085,14 +2188,16 @@ if ($notesParam === null) {
                 // Use setTimeout to ensure DOM is ready
                 setTimeout(() => {
                     editor.scrollTop = state.scrollTop;
-                    editor.focus();
+                    if (musicEditorOpenByTab[activeTabIndex]) editor.blur();
+                    else editor.focus();
                     editor.setSelectionRange(state.selectionStart, state.selectionEnd);
                     updateStatusBar();
                 }, 0);
             } else {
                 setTimeout(() => {
                     editor.scrollTop = 0;
-                    editor.focus();
+                    if (musicEditorOpenByTab[activeTabIndex]) editor.blur();
+                    else editor.focus();
                     editor.setSelectionRange(0, 0);
                     updateStatusBar();
                 }, 0);
@@ -2106,6 +2211,7 @@ if ($notesParam === null) {
                 editor.value = '';
                 updateLinkHighlights();
                 updateStatusBar();
+                syncMusicEditor();
                 return;
             }
 
@@ -2114,6 +2220,7 @@ if ($notesParam === null) {
             restoreTabState();
             updateLinkHighlights();
             firstFindMatchIsDirty = true; // Note changed, re-evaluate first match
+            syncMusicEditor();
             // updateStatusBar is called inside restoreTabState after selection is set
         }
 
@@ -3452,6 +3559,12 @@ if ($notesParam === null) {
                         break;
                     case 'close-right':
                         closeTabGroup(indices.filter(tabIndex => tabIndex > index));
+                        break;
+                    case 'open-music':
+                        setMusicEditorOpen(index, true);
+                        break;
+                    case 'close-music':
+                        setMusicEditorOpen(index, false);
                         break;
                 }
             });

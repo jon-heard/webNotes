@@ -2,7 +2,7 @@ const musicAssetBase = new URL('./', document.currentScript.src);
 window.MusicNotes = window.MusicNotes || {};
 window.MusicNotes.mount = function(editorElement, host) {
     if (!editorElement || !host) throw new Error('Music Notes requires an editor and a host element.');
-    if (host.dataset.musicNotesMounted === 'true') return window.MusicNotepadPiano;
+    if (host.dataset.musicNotesMounted === 'true') return host.musicNotesController;
     if (!document.getElementById('music-notes-style')) {
         const style = document.createElement('style');
         style.id = 'music-notes-style';
@@ -63,13 +63,14 @@ window.MusicNotes.mount = function(editorElement, host) {
                     <option value="3/2">3/2</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
                 </select>
             </div>
-            <div class="music-notes-cluster music-notes-revision" aria-label="Revision 3">R.3</div>
+            <div class="music-notes-cluster music-notes-revision" aria-label="Revision 4">R.4</div>
         </div>
         <div class="music-notes-roll-frame"><div id="roll" class="music-notes-roll" aria-label="Piano keyboard" tabindex="0"><div id="keys" class="music-notes-keys"></div></div></div>
     </section>`;
-    initializeMusicNotes(editorElement, host);
+    const controller = initializeMusicNotes(editorElement, host);
+    host.musicNotesController = controller;
     host.dataset.musicNotesMounted = 'true';
-    return window.MusicNotepadPiano;
+    return controller;
 };
 function initializeMusicNotes(editorElement, host) {
             'use strict';
@@ -520,6 +521,7 @@ function initializeMusicNotes(editorElement, host) {
             recordButton.addEventListener('click', toggleRecording);
             host.querySelector('#undo-record').addEventListener('click', undoRecordedNote);
             document.addEventListener('keydown', event => {
+                if (host.hidden) return;
                 if (event.ctrlKey && event.altKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'r') {
                     event.preventDefault(); toggleRecording(); return;
                 }
@@ -562,12 +564,23 @@ function initializeMusicNotes(editorElement, host) {
                 preparedText = ''; events = [];
             });
 
+            function resetForEditorChange() {
+                playbackRun++; clearTimers(playbackTimers); clearTimers(metronomeTimers); stopPlaybackVoices(); stopPreview();
+                for (const state of pointerStates.values()) if (state.recordTimer) clearInterval(state.recordTimer);
+                pointerStates.clear(); stopAllNotes(); roll.classList.remove('panning');
+                playbackState = 'stopped'; updatePlaybackControl(); playbackElapsed = 0;
+                preparedText = ''; events = [];
+                recordedEdits.length = 0; recordedAccidentals.clear();
+                host.querySelector('#undo-record').disabled = true;
+            }
+
             window.MusicNotepadPiano = Object.freeze({
                 playNote, stopNote, stopAllNotes, playAbcEvent, stopAbcEvent, midiToNoteName: noteName,
                 range: Object.freeze({ min: minMidi, max: maxMidi }), abcjs: window.ABCJS || null
             });
             buildKeyboard();
             loadSampleArchive().catch(error => console.error(error));
+            return Object.freeze({ refresh: resetForEditorChange, suspend: resetForEditorChange, loadSamples: loadSampleArchive });
         
 }
 

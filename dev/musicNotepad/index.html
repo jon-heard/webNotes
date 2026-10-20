@@ -37,10 +37,12 @@ Q: 1/4=120
             });
             window.musicNotesLoading = (async () => {
                 try {
-                    await loadScript(new URL('abc.min.js', assets));
-                    await loadScript(new URL('fflate.min.js', assets));
-                    await loadScript(new URL('musicNotes.js', assets));
-                    return window.MusicNotes.mount(document.getElementById('abc-text'), document.getElementById('music-notes-host'));
+                    if (!window.ABCJS) await loadScript(new URL('abc.min.js', assets));
+                    if (!window.fflate?.unzipSync) await loadScript(new URL('fflate.min.js', assets));
+                    if (!window.MusicNotes?.mount) await loadScript(new URL('musicNotes.js', assets));
+                    const controller = window.MusicNotes.mount(document.getElementById('abc-text'), document.getElementById('music-notes-host'));
+                    await controller.loadSamples();
+                    return controller;
                 } catch (error) {
                     window.musicNotesLoading = null;
                     throw error;
