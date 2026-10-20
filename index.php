@@ -2,6 +2,16 @@
 // Handle API actions
 $action = isset($_GET['action']) ? $_GET['action'] : null;
 
+// Store all notes in the dedicated notes folder.
+$notesDir = __DIR__ . '/notes';
+if (!is_dir($notesDir)) {
+    mkdir($notesDir, 0755, true);
+}
+function getNoteFilePath($filename) {
+    global $notesDir;
+    return $notesDir . '/' . $filename . '.nts';
+}
+
 if ($action === 'loadfile') {
     header('Content-Type: application/json');
 
@@ -20,7 +30,7 @@ if ($action === 'loadfile') {
         exit;
     }
 
-    $filepath = __DIR__ . '/' . $filename . '.nts';
+    $filepath = getNoteFilePath($filename);
 
     if (!file_exists($filepath)) {
         // Return default empty structure if file doesn't exist
@@ -71,9 +81,14 @@ if ($action === 'savefile') {
         exit;
     }
 
-    $filepath = __DIR__ . '/' . $filename . '.nts';
+    $filepath = getNoteFilePath($filename);
 
-    if (file_put_contents($filepath, $content) === false) {
+    if (!is_string($content) || json_decode($content) === null || json_last_error() !== JSON_ERROR_NONE) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid note content']);
+        exit;
+    }
+    if (file_put_contents($filepath, $content, LOCK_EX) === false) {
         http_response_code(500);
         echo json_encode(['error' => 'Failed to save file']);
         exit;
@@ -109,7 +124,7 @@ if ($action === 'createfile') {
         exit;
     }
 
-    $filepath = __DIR__ . '/' . $filename . '.nts';
+    $filepath = getNoteFilePath($filename);
 
     if (file_exists($filepath)) {
         http_response_code(400);
@@ -156,8 +171,8 @@ if ($action === 'renamefile') {
         exit;
     }
 
-    $oldpath = __DIR__ . '/' . $oldname . '.nts';
-    $newpath = __DIR__ . '/' . $newname . '.nts';
+    $oldpath = getNoteFilePath($oldname);
+    $newpath = getNoteFilePath($newname);
 
     if (!file_exists($oldpath)) {
         http_response_code(404);
@@ -207,7 +222,7 @@ if ($action === 'deletefile') {
         exit;
     }
 
-    $filepath = __DIR__ . '/' . $filename . '.nts';
+    $filepath = getNoteFilePath($filename);
 
     if (!file_exists($filepath)) {
         http_response_code(404);
@@ -231,7 +246,7 @@ $notesParam = isset($_GET['notes']) ? $_GET['notes'] : null;
 
 // If no notes parameter, show file listing
 if ($notesParam === null) {
-    $ntsFiles = glob('*.nts');
+    $ntsFiles = glob($notesDir . '/*.nts') ?: [];
     // Sort by modification time (most recent first)
     usort($ntsFiles, function($a, $b) {
         return filemtime($b) - filemtime($a);
@@ -244,6 +259,8 @@ if ($notesParam === null) {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta charset="UTF-8">
 	<link rel="icon" type="image/x-icon" href="<?php echo($icon) ?>" />
+        <link rel="manifest" href="./manifest.webmanifest">
+        <meta name="theme-color" content="#4080ff">
         <style>
             body {
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -403,16 +420,20 @@ if ($notesParam === null) {
         <div class="new-file">
             <h3>Create new notes file:</h3>
             <form id="createForm">
-                <input type="text" id="newNotesName" placeholder="Enter name..." pattern="[a-zA-Z_][a-zA-Z0-9_]*" title="Notes name must be a proper identifier" required>
+                <input type="text" id="newNotesName" placeholder="Enter name..." title="Spaces will be changed to underscores" required>
                 <button type="submit">Create</button>
             </form>
         </div>
         <script>
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('./service-worker.js').catch(err => console.error('Service worker registration failed:', err));
+            }
             const validPattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+            const normalizeName = value => value.trim().replace(/\s+/g, '_');
 
             document.getElementById('createForm').addEventListener('submit', async function(e) {
                 e.preventDefault();
-                const name = document.getElementById('newNotesName').value.trim();
+                const name = normalizeName(document.getElementById('newNotesName').value);
                 if (!validPattern.test(name)) {
                     alert('Notes name must be a proper identifier.');
                     return;
@@ -438,7 +459,8 @@ if ($notesParam === null) {
             document.querySelectorAll('.btn-rename').forEach(btn => {
                 btn.addEventListener('click', async function() {
                     const oldName = this.dataset.name;
-                    const newName = prompt('Enter new name:', oldName);
+                    const newNameInput = prompt('Enter new name (spaces become underscores):', oldName);
+                    const newName = newNameInput === null ? null : normalizeName(newNameInput);
                     if (newName === null || newName === oldName) return;
                     if (!validPattern.test(newName)) {
                         alert('Notes name must be a proper identifier.');
@@ -503,9 +525,11 @@ if ($notesParam === null) {
 <html lang="en">
 <head>
     <title>Web Notes</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta charset="UTF-8">
     <link rel="icon" type="image/x-icon" href="<?php echo($icon) ?>" />
+    <link rel="manifest" href="./manifest.webmanifest">
+    <meta name="theme-color" content="#4080ff">
     <style>
         * {
             margin: 0;
@@ -543,17 +567,20 @@ if ($notesParam === null) {
             background: #404040;
         }
 
-        body.night-mode #sidebar-buttons {
+        body.night-mode #sidebar-buttons,
+        body.night-mode #editor-buttons {
             border-top-color: #404040;
         }
 
-        body.night-mode #sidebar-buttons button {
+        body.night-mode #sidebar-buttons button,
+        body.night-mode #editor-buttons button {
             background: #333;
             border-color: #505050;
             color: #e0e0e0;
         }
 
-        body.night-mode #sidebar-buttons button:hover {
+        body.night-mode #sidebar-buttons button:hover,
+        body.night-mode #editor-buttons button:hover {
             background: #404040;
         }
 
@@ -561,6 +588,13 @@ if ($notesParam === null) {
             background: #e74c3c;
             border-color: #c0392b;
         }
+        #btn-save.saving,
+        body.night-mode #btn-save.saving {
+            background: #ffd54f;
+            border-color: #e6b800;
+            color: #222;
+        }
+        #btn-save.save-error { background: #e74c3c; border-color: #c0392b; color: #fff; }
 
         body.night-mode #tabs {
             background: #252525;
@@ -602,6 +636,18 @@ if ($notesParam === null) {
         body.night-mode #context-menu {
             background: #333;
             border-color: #505050;
+        }
+
+        body.night-mode #tab-context-menu,
+        body.night-mode .tab-submenu {
+            background: #333;
+            border-color: #505050;
+            color: #e0e0e0;
+        }
+        body.night-mode .tab-menu-item:hover,
+        body.night-mode .tab-menu-parent:hover,
+        body.night-mode .tab-menu-parent.open {
+            background: #404040;
         }
 
         body.night-mode .context-item:hover {
@@ -748,7 +794,8 @@ if ($notesParam === null) {
             background: #4080ff;
         }
 
-        #sidebar-buttons {
+        #sidebar-buttons,
+        #editor-buttons {
             display: flex;
             border-top: 1px solid #ddd;
             padding: 8px;
@@ -756,7 +803,8 @@ if ($notesParam === null) {
             flex-shrink: 0;
         }
 
-        #sidebar-buttons button {
+        #sidebar-buttons button,
+        #editor-buttons button {
             flex: 1;
             padding: 8px;
             font-size: 16px;
@@ -766,7 +814,8 @@ if ($notesParam === null) {
             background: #fff;
         }
 
-        #sidebar-buttons button:hover {
+        #sidebar-buttons button:hover,
+        #editor-buttons button:hover {
             background: #e8e8e8;
         }
 
@@ -774,6 +823,13 @@ if ($notesParam === null) {
             background: #e74c3c;
             border-color: #c0392b;
         }
+        #btn-save.saving,
+        body.night-mode #btn-save.saving {
+            background: #ffd54f;
+            border-color: #e6b800;
+            color: #222;
+        }
+        #btn-save.save-error { background: #e74c3c; border-color: #c0392b; color: #fff; }
 
         /* Main area */
         #main {
@@ -872,8 +928,10 @@ if ($notesParam === null) {
             flex: 1;
             width: 100%;
             padding: 15px;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 14px;
+            font-family: 'Cascadia Code', 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+            font-size: 16px;
+            tab-size: 2;
+            -moz-tab-size: 2;
             line-height: 1.5;
             border: none;
             resize: none;
@@ -1054,16 +1112,74 @@ if ($notesParam === null) {
             background: #ddd;
             margin: 4px 0;
         }
+
+        #tab-context-menu,
+        .tab-submenu {
+            position: fixed;
+            z-index: 1100;
+            min-width: 165px;
+            padding: 4px 0;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            color: #222;
+        }
+
+        #tab-context-menu {
+            display: none;
+        }
+
+        .tab-menu-item,
+        .tab-menu-parent {
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+
+        .tab-menu-item:hover,
+        .tab-menu-parent:hover,
+        .tab-menu-parent.open {
+            background: #f0f0f0;
+        }
+
+        .tab-menu-parent {
+            position: relative;
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .tab-submenu {
+            display: none;
+            position: absolute;
+            top: -5px;
+            left: calc(100% - 1px);
+        }
+
+        .tab-menu-parent:hover .tab-submenu,
+        .tab-menu-parent.open .tab-submenu {
+            display: block;
+        }
+
+        #tab-context-menu.submenu-left .tab-submenu {
+            left: auto;
+            right: calc(100% - 1px);
+        }
     </style>
 </head>
 <body>
     <div id="sidebar">
         <div id="hierarchy"></div>
+        <div id="editor-buttons">
+            <button id="btn-undo" title="Undo">↶</button>
+            <button id="btn-redo" title="Redo">↷</button>
+            <button id="btn-insert-tab" title="Insert tab character">⇥</button>
+        </div>
         <div id="sidebar-buttons">
             <button id="btn-save" title="Save">&#128190;</button>
             <button id="btn-find" title="Find">&#128269;</button>
             <button id="btn-new" title="New Note">&#10133;</button>
-            <button id="btn-back" title="Back to Notes List">&#8592;</button>
+            <button id="btn-back" title="Back to Notes List">🠈</button>
         </div>
     </div>
     <div id="sidebar-resizer"></div>
@@ -1105,8 +1221,20 @@ if ($notesParam === null) {
         <div class="context-item" data-action="copy-name">Copy name</div>
         <div class="context-item" data-action="copy-path">Copy path</div>
         <div class="context-separator"></div>
-        <div class="context-item" data-action="bound-copy">Create bound copy</div>
+        <div class="context-item" data-action="tree-merged-copy">Create tree-merged copy</div>
         <div class="context-item" data-action="properties">Properties</div>
+    </div>
+    <div id="tab-context-menu">
+        <div class="tab-menu-item" data-tab-action="close">Close</div>
+        <div class="tab-menu-parent">
+            <span>Close multiple</span><span aria-hidden="true">›</span>
+            <div class="tab-submenu">
+                <div class="tab-menu-item" data-tab-action="close-all">close all</div>
+                <div class="tab-menu-item" data-tab-action="close-all-but-this">Close all but this</div>
+                <div class="tab-menu-item" data-tab-action="close-left">close all to left</div>
+                <div class="tab-menu-item" data-tab-action="close-right">close all to right</div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -1117,6 +1245,8 @@ if ($notesParam === null) {
         let activeTabIndex = 0;
         let isDirty = false;
         let saveTimer = null;
+        let editRevision = 0;
+        let savePromise = null;
         let contextMenuTarget = null;
         let collapsedPaths = new Set();
 
@@ -1268,13 +1398,12 @@ if ($notesParam === null) {
 
         // Mark as dirty and start autosave timer
         function markDirty() {
-            const wasDirty = isDirty;
             isDirty = true;
+            editRevision++;
+            document.getElementById('btn-save').classList.remove('save-error');
             updateDirtyIndicator();
-            if (!wasDirty) {
-                if (saveTimer) clearTimeout(saveTimer);
-                saveTimer = setTimeout(saveNotes, 60000);
-            }
+            if (saveTimer) clearTimeout(saveTimer);
+            saveTimer = setTimeout(saveNotes, 30000);
         }
 
         // Clean note data for saving - remove empty text and empty children arrays
@@ -1313,27 +1442,47 @@ if ($notesParam === null) {
                 saveTimer = null;
             }
 
-            try {
-                const cleanedData = cleanNoteForSave(notesData);
-                const response = await fetch('?action=savefile', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        filename: getNotesFilename(),
-                        content: JSON.stringify(cleanedData, null, 2)
-                    })
-                });
-
-                if (response.ok) {
-                    isDirty = false;
+            if (savePromise) return savePromise;
+            const saveBtn = document.getElementById('btn-save');
+            saveBtn.classList.add('saving');
+            saveBtn.classList.remove('save-error');
+            savePromise = (async () => {
+                try {
+                    do {
+                        if (saveTimer) {
+                            clearTimeout(saveTimer);
+                            saveTimer = null;
+                        }
+                        const revisionBeingSaved = editRevision;
+                        const cleanedData = cleanNoteForSave(notesData);
+                        const response = await fetch('?action=savefile', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                filename: getNotesFilename(),
+                                content: JSON.stringify(cleanedData, null, 2)
+                            })
+                        });
+                        const result = await response.json();
+                        if (!response.ok || result.success !== true) {
+                            throw new Error(result.error || 'Server did not confirm the save');
+                        }
+                        if (revisionBeingSaved === editRevision) isDirty = false;
+                        updateDirtyIndicator();
+                    } while (isDirty);
+                    return true;
+                } catch (err) {
+                    console.error('Error saving notes:', err);
+                    saveBtn.classList.add('save-error');
+                    return false;
+                } finally {
+                    saveBtn.classList.remove('saving');
+                    savePromise = null;
                     updateDirtyIndicator();
-                    console.log('Notes saved successfully');
-                } else {
-                    console.error('Failed to save notes');
+                    if (isDirty && !saveTimer) saveTimer = setTimeout(saveNotes, 30000);
                 }
-            } catch (err) {
-                console.error('Error saving notes:', err);
-            }
+            })();
+            return savePromise;
         }
 
         // Load notes from file
@@ -1816,8 +1965,34 @@ if ($notesParam === null) {
                     }
                 });
 
+                tab.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    showTabContextMenu(e.clientX, e.clientY, index);
+                });
+
                 container.insertBefore(tab, addBtn);
             });
+        }
+
+        function showTabContextMenu(x, y, index) {
+            const menu = document.getElementById('tab-context-menu');
+            menu.classList.remove('submenu-left');
+            menu.querySelector('.tab-menu-parent').classList.remove('open');
+            menu.style.left = x + 'px';
+            menu.style.top = y + 'px';
+            menu.style.display = 'block';
+
+            const rect = menu.getBoundingClientRect();
+            if (rect.right > window.innerWidth) menu.style.left = Math.max(5, window.innerWidth - rect.width - 5) + 'px';
+            if (rect.bottom > window.innerHeight) menu.style.top = Math.max(5, window.innerHeight - rect.height - 5) + 'px';
+            if (parseFloat(menu.style.left) + rect.width + 175 > window.innerWidth) {
+                menu.classList.add('submenu-left');
+            }
+            menu.dataset.tabIndex = String(index);
+        }
+
+        function hideTabContextMenu() {
+            document.getElementById('tab-context-menu').style.display = 'none';
         }
 
         // Add new tab
@@ -1854,6 +2029,40 @@ if ($notesParam === null) {
                 renderTabs();
                 updateEditor();
             }
+        }
+
+        function closeTabGroup(indicesToClose, preferredIndex = null) {
+            const closeSet = new Set(indicesToClose);
+            if (closeSet.size === 0) return;
+
+            saveTabState();
+            const oldActiveIndex = activeTabIndex;
+            const keptEntries = tabs
+                .map((path, index) => ({ path, state: tabStates[index], index }))
+                .filter(entry => !closeSet.has(entry.index));
+
+            tabs = keptEntries.map(entry => entry.path);
+            tabStates = keptEntries.map(entry => entry.state);
+
+            if (tabs.length === 0) {
+                activeTabIndex = 0;
+                addTab(getRootPath());
+                return;
+            }
+
+            let selectedIndex = keptEntries.findIndex(entry => entry.index === preferredIndex);
+            if (selectedIndex === -1) {
+                selectedIndex = keptEntries.findIndex(entry => entry.index === oldActiveIndex);
+            }
+            if (selectedIndex === -1) {
+                selectedIndex = keptEntries.findIndex(entry => entry.index > oldActiveIndex);
+                if (selectedIndex === -1) selectedIndex = keptEntries.length - 1;
+            }
+            activeTabIndex = selectedIndex;
+
+            if (!findAllNotes) invalidateSearch();
+            renderTabs();
+            updateEditor();
         }
 
         // Save current tab state (scroll, caret, selection)
@@ -1908,6 +2117,10 @@ if ($notesParam === null) {
             // updateStatusBar is called inside restoreTabState after selection is set
         }
 
+        function normalizeWikiLinkTarget(linkContent) {
+            return linkContent.trim().replace(/^(https?)\\:/i, '$1:');
+        }
+
         // Update link highlights in editor
         function updateLinkHighlights() {
             const overlay = document.getElementById('link-overlay');
@@ -1916,11 +2129,17 @@ if ($notesParam === null) {
             const editor = document.getElementById('editor');
             const text = editor.value;
 
-            const wikiLinkPattern = /\[\[([a-zA-Z_][a-zA-Z0-9_]*(?:\/[a-zA-Z_][a-zA-Z0-9_]*)*)\]\]/g;
+            const wikiLinkPattern = /\[\[([^\]\n]+)\]\]/g;
             const matches = [];
             let match;
             while ((match = wikiLinkPattern.exec(text)) !== null) {
-                matches.push({ index: match.index, text: match[0], content: match[1] });
+                const pipeIndex = match[1].indexOf('|');
+                const target = pipeIndex === -1 ? match[1] : match[1].slice(pipeIndex + 1);
+                matches.push({
+                    index: match.index,
+                    text: match[0],
+                    content: normalizeWikiLinkTarget(target)
+                });
             }
 
             if (matches.length === 0) return;
@@ -2037,7 +2256,8 @@ if ($notesParam === null) {
             if (!parent) return;
 
             const defaultName = generateUntitledName(parent);
-            const name = prompt('Enter note name:', defaultName);
+            const nameInput = prompt('Enter note name (spaces become underscores):', defaultName);
+            const name = nameInput === null ? null : nameInput.trim().replace(/\s+/g, '_');
             if (!name) return;
 
             if (!isValidNoteName(name)) {
@@ -2060,7 +2280,8 @@ if ($notesParam === null) {
             const note = getNoteByPath(path);
             if (!note) return;
 
-            const newName = prompt('Enter new name:', note.name);
+            const newNameInput = prompt('Enter new name (spaces become underscores):', note.name);
+            const newName = newNameInput === null ? null : newNameInput.trim().replace(/\s+/g, '_');
             if (!newName || newName === note.name) return;
 
             if (!isValidNoteName(newName)) {
@@ -2216,6 +2437,11 @@ if ($notesParam === null) {
 
         // Open wiki link in new tab
         function openLinkInNewTab(linkContent) {
+            linkContent = normalizeWikiLinkTarget(linkContent);
+            if (/^https?:\/\//i.test(linkContent)) {
+                window.open(linkContent, '_blank', 'noopener,noreferrer');
+                return;
+            }
             const segments = linkContent.split('/');
             let foundPath = null;
 
@@ -2251,6 +2477,11 @@ if ($notesParam === null) {
 
         // Navigate to wiki link
         function navigateToWikiLink(linkContent) {
+            linkContent = normalizeWikiLinkTarget(linkContent);
+            if (/^https?:\/\//i.test(linkContent)) {
+                window.open(linkContent, '_blank', 'noopener,noreferrer');
+                return;
+            }
             const segments = linkContent.split('/');
 
             let foundPath = null;
@@ -2303,12 +2534,12 @@ if ($notesParam === null) {
             }
         }
 
-        // Create bound copy (combines note and all children content)
-        function createBoundCopy(path) {
+        // Create tree-merged copy (combines note and all children content)
+        function createTreeMergedCopy(path) {
             const note = getNoteByPath(path);
             if (!note) return;
             if (path.length === 1) {
-                alert('Cannot create bound copy of root note.');
+                alert('Cannot create tree-merged copy of root note.');
                 return;
             }
 
@@ -2321,7 +2552,7 @@ if ($notesParam === null) {
                 for (const child of n.children) {
                     const childContent = collectContent(child);
                     if (childContent) {
-                        content += (content ? '\n\n' : '') + childContent;
+                        content += (content ? '\n' : '') + childContent;
                     }
                 }
                 return content;
@@ -2329,18 +2560,18 @@ if ($notesParam === null) {
 
             const combinedContent = collectContent(note);
 
-            // Generate unique name with _bound suffix
+            // Generate unique name with _tree_merged suffix
             let baseName = note.name;
-            // Remove existing _bound or _boundN suffix
-            const boundMatch = note.name.match(/_bound(\d*)$/);
-            if (boundMatch) {
-                baseName = note.name.slice(0, -('_bound' + boundMatch[1]).length);
+            // Remove an existing _tree_merged or _tree_mergedN suffix
+            const mergedMatch = note.name.match(/_tree_merged(\d*)$/);
+            if (mergedMatch) {
+                baseName = note.name.slice(0, -('_tree_merged' + mergedMatch[1]).length);
             }
 
-            let newName = baseName + '_bound';
+            let newName = baseName + '_tree_merged';
             let suffix = 2;
             while (parent.children.some(c => namesEqual(c.name, newName))) {
-                newName = baseName + '_bound' + suffix;
+                newName = baseName + '_tree_merged' + suffix;
                 suffix++;
             }
 
@@ -2365,20 +2596,20 @@ if ($notesParam === null) {
                 return text.trim().split(/\s+/).length;
             }
 
-            // Collect bound content (note + all descendants)
+            // Collect tree-merged content (note + all descendants)
             function collectContent(n) {
                 let content = n.text || '';
                 for (const child of n.children) {
                     const childContent = collectContent(child);
                     if (childContent) {
-                        content += (content ? '\n\n' : '') + childContent;
+                        content += (content ? '\n' : '') + childContent;
                     }
                 }
                 return content;
             }
 
             const noteText = note.text || '';
-            const boundText = collectContent(note);
+            const treeMergedText = collectContent(note);
 
             // Count characters excluding whitespace
             function countChars(text) {
@@ -2387,15 +2618,15 @@ if ($notesParam === null) {
 
             const charCount = countChars(noteText);
             const wordCount = countWords(noteText);
-            const boundCharCount = countChars(boundText);
-            const boundWordCount = countWords(boundText);
+            const treeMergedCharCount = countChars(treeMergedText);
+            const treeMergedWordCount = countWords(treeMergedText);
 
             alert(
                 `Properties for "${note.name}"\n\n` +
                 `Character count: ${charCount}\n` +
                 `Word count: ${wordCount}\n` +
-                `Bound character count: ${boundCharCount}\n` +
-                `Bound word count: ${boundWordCount}`
+                `Tree-merged character count: ${treeMergedCharCount}\n` +
+                `Tree-merged word count: ${treeMergedWordCount}`
             );
         }
 
@@ -2899,6 +3130,75 @@ if ($notesParam === null) {
 
             const editor = document.getElementById('editor');
 
+            function adjustTabIndent(outdent) {
+                const value = editor.value;
+                const selectionStart = editor.selectionStart;
+                const selectionEnd = editor.selectionEnd;
+                if (!outdent && selectionStart === selectionEnd) {
+                    document.execCommand('insertText', false, '\t');
+                    editor.dispatchEvent(new Event('input', { bubbles: true }));
+                    return;
+                }
+
+                const firstLineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
+                const lineSelectionEnd = selectionEnd > selectionStart && value[selectionEnd - 1] === '\n'
+                    ? selectionEnd - 1
+                    : selectionEnd;
+                const lastLineStart = value.lastIndexOf('\n', lineSelectionEnd - 1) + 1;
+                const lineStarts = [];
+                for (let lineStart = firstLineStart; lineStart <= lastLineStart;) {
+                    lineStarts.push(lineStart);
+                    const newline = value.indexOf('\n', lineStart);
+                    if (newline === -1 || newline + 1 > lastLineStart) break;
+                    lineStart = newline + 1;
+                }
+
+                const edits = [];
+                for (const lineStart of lineStarts) {
+                    if (!outdent) {
+                        edits.push({ start: lineStart, remove: 0, insert: '\t' });
+                    } else if (value[lineStart] === '\t') {
+                        edits.push({ start: lineStart, remove: 1, insert: '' });
+                    } else {
+                        const spaces = value.slice(lineStart).match(/^ {1,2}/);
+                        if (spaces) edits.push({ start: lineStart, remove: spaces[0].length, insert: '' });
+                    }
+                }
+                if (edits.length === 0) return;
+
+                let updated = '';
+                let cursor = 0;
+                for (const edit of edits) {
+                    updated += value.slice(cursor, edit.start) + edit.insert;
+                    cursor = edit.start + edit.remove;
+                }
+                updated += value.slice(cursor);
+
+                function mapOffset(offset) {
+                    let delta = 0;
+                    for (const edit of edits) {
+                        const editEnd = edit.start + edit.remove;
+                        if (edit.remove === 0 && edit.start === offset) {
+                            delta += edit.insert.length;
+                        } else if (offset >= editEnd && edit.remove > 0) {
+                            delta += edit.insert.length - edit.remove;
+                        } else if (edit.start < offset && offset < editEnd) {
+                            return edit.start + delta + edit.insert.length;
+                        } else if (edit.start < offset) {
+                            delta += edit.insert.length - edit.remove;
+                        }
+                    }
+                    return Math.max(0, Math.min(updated.length, offset + delta));
+                }
+
+                const mappedStart = mapOffset(selectionStart);
+                const mappedEnd = mapOffset(selectionEnd);
+                editor.setSelectionRange(0, value.length);
+                document.execCommand('insertText', false, updated);
+                editor.setSelectionRange(mappedStart, mappedEnd);
+                editor.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+
             editor.addEventListener('input', () => {
                 if (tabs.length === 0 || activeTabIndex >= tabs.length) return;
                 const note = getNoteByPath(tabs[activeTabIndex]);
@@ -2953,13 +3253,18 @@ if ($notesParam === null) {
                 }
             });
 
-            // Multi-line indent/outdent with space/tab when selection starts at line start
+            // Tab indents selected lines; Shift+Tab outdents selected/current lines.
             editor.addEventListener('keydown', (e) => {
                 const isSpace = e.key === ' ' && !e.ctrlKey && !e.altKey && !e.metaKey;
                 const isTab = e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey;
-                const isShiftTab = e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey;
 
                 if (!isSpace && !isTab) return;
+
+                if (isTab) {
+                    e.preventDefault();
+                    adjustTabIndent(e.shiftKey);
+                    return;
+                }
 
                 const selStart = editor.selectionStart;
                 const selEnd = editor.selectionEnd;
@@ -2969,7 +3274,7 @@ if ($notesParam === null) {
                 const atLineStart = selStart === 0 || text[selStart - 1] === '\n';
                 if (!atLineStart) return;
 
-                // Must have a selection for this feature
+                // Must have a selection for the multiline indent feature.
                 if (selStart === selEnd) return;
 
                 e.preventDefault();
@@ -2978,26 +3283,7 @@ if ($notesParam === null) {
                 const selected = text.substring(selStart, selEnd);
                 const lines = selected.split('\n');
 
-                let newLines;
-                if (isShiftTab) {
-                    // Remove one whitespace character from each line start (if present)
-                    newLines = lines.map(line => {
-                        if (line.length > 0 && (line[0] === ' ' || line[0] === '\t')) {
-                            return line.substring(1);
-                        }
-                        return line;
-                    });
-                } else {
-                    // Prepend space or tab to each non-empty line
-                    const char = isTab ? '\t' : ' ';
-                    newLines = lines.map(line => {
-                        // Skip empty lines (only whitespace)
-                        if (/^\s*$/.test(line)) {
-                            return line;
-                        }
-                        return char + line;
-                    });
-                }
+                const newLines = lines.map(line => /^\s*$/.test(line) ? line : ' ' + line);
 
                 const newSelected = newLines.join('\n');
 
@@ -3025,6 +3311,20 @@ if ($notesParam === null) {
 
             document.getElementById('tab-add').addEventListener('click', () => {
                 addTab(getRootPath());
+            });
+
+            document.getElementById('btn-undo').addEventListener('click', () => {
+                editor.focus();
+                document.execCommand('undo');
+            });
+            document.getElementById('btn-redo').addEventListener('click', () => {
+                editor.focus();
+                document.execCommand('redo');
+            });
+            document.getElementById('btn-insert-tab').addEventListener('click', () => {
+                editor.focus();
+                document.execCommand('insertText', false, '\t');
+                editor.dispatchEvent(new Event('input', { bubbles: true }));
             });
 
             document.getElementById('btn-save').addEventListener('click', () => {
@@ -3118,6 +3418,44 @@ if ($notesParam === null) {
                 window.location.href = window.location.pathname;
             });
 
+            document.getElementById('tab-context-menu').addEventListener('click', (e) => {
+                const menu = document.getElementById('tab-context-menu');
+                const parent = e.target.closest('.tab-menu-parent');
+                if (parent && !e.target.closest('[data-tab-action]')) {
+                    parent.classList.toggle('open');
+                    return;
+                }
+
+                const item = e.target.closest('[data-tab-action]');
+                if (!item) return;
+                const index = Number(menu.dataset.tabIndex);
+                if (!Number.isInteger(index) || index < 0 || index >= tabs.length) {
+                    hideTabContextMenu();
+                    return;
+                }
+
+                const indices = tabs.map((_, tabIndex) => tabIndex);
+                const action = item.dataset.tabAction;
+                hideTabContextMenu();
+                switch (action) {
+                    case 'close':
+                        closeTab(index);
+                        break;
+                    case 'close-all':
+                        closeTabGroup(indices);
+                        break;
+                    case 'close-all-but-this':
+                        closeTabGroup(indices.filter(tabIndex => tabIndex !== index), index);
+                        break;
+                    case 'close-left':
+                        closeTabGroup(indices.filter(tabIndex => tabIndex < index));
+                        break;
+                    case 'close-right':
+                        closeTabGroup(indices.filter(tabIndex => tabIndex > index));
+                        break;
+                }
+            });
+
             document.getElementById('context-menu').addEventListener('click', (e) => {
                 const menuItem = e.target.closest('[data-action]');
                 if (!menuItem || !contextMenuTarget) return;
@@ -3149,8 +3487,8 @@ if ($notesParam === null) {
                         copyToClipboard(getPathString(targetPath));
                         break;
                     }
-                    case 'bound-copy':
-                        createBoundCopy(targetPath);
+                    case 'tree-merged-copy':
+                        createTreeMergedCopy(targetPath);
                         break;
                     case 'properties':
                         showProperties(targetPath);
@@ -3164,11 +3502,19 @@ if ($notesParam === null) {
                 if (!e.target.closest('#context-menu')) {
                     hideContextMenu();
                 }
+                if (!e.target.closest('#tab-context-menu')) {
+                    hideTabContextMenu();
+                }
             });
 
             document.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                    e.preventDefault();
+                    saveNotes();
+                }
                 if (e.key === 'Escape') {
                     hideContextMenu();
+                    hideTabContextMenu();
                 }
                 if (e.key === 'Delete' && !e.target.matches('input, textarea')) {
                     const currentPath = tabs[activeTabIndex];
@@ -3194,6 +3540,12 @@ if ($notesParam === null) {
             window.addEventListener('resize', () => {
                 updateLinkHighlights();
             });
+
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('./service-worker.js').catch(err => {
+                    console.error('Service worker registration failed:', err);
+                });
+            }
 
             // Sidebar resizer
             const resizer = document.getElementById('sidebar-resizer');
