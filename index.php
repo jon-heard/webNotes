@@ -815,8 +815,9 @@ if ($notesParam === null) {
             display: flex;
             align-items: center;
             gap: 12px;
+            padding: 2px 8px;
         }
-        #status-position { flex: 1; font-size: 20px; line-height: 1; }
+        #status-position { flex: 1; margin: 1px; padding: 1px; white-space: pre; font-size: 20px; line-height: .9; }
         #status-bar #editor-buttons {
             display: flex;
             flex: none;
@@ -1255,7 +1256,7 @@ if ($notesParam === null) {
     <div id="main">
         <div id="tabs">
             <button id="tab-add" title="New Tab">+</button>
-            <span id="main-revision" aria-label="Main app revision 1">R.1</span>
+            <span id="main-revision" aria-label="Main app revision 2">R.2</span>
         </div>
         <div id="editor-container">
             <textarea id="editor" spellcheck="false" autocorrect="off" autocapitalize="off"></textarea>
@@ -2898,7 +2899,7 @@ if ($notesParam === null) {
             const line = lines.length;
             const col = lines[lines.length - 1].length + 1;
 
-            document.getElementById('status-position').textContent = `Ln ${line}, Col ${col}`;
+            document.getElementById('status-position').textContent = `Ln ${line}\nCol ${col}`;
         }
 
         // Find functionality state

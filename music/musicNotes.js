@@ -1,4 +1,5 @@
 const musicAssetBase = new URL('./', document.currentScript.src);
+const musicKeyRoots = ['A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'];
 window.MusicNotes = window.MusicNotes || {};
 window.MusicNotes.mount = function(editorElement, host) {
     if (!editorElement || !host) throw new Error('Music Notes requires an editor and a host element.');
@@ -23,6 +24,15 @@ window.MusicNotes.mount = function(editorElement, host) {
             .music-notes-inserts button { background: #183c68; border-color: #376ca7; color: #fff; }
             .music-notes-inserts button:hover { background: #245184; }
             .music-notes-inserts[hidden] { display: none; }
+            .music-notes-key-dialog[hidden] { display: none; }
+            .music-notes-key-dialog { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; padding: 16px; background: #0009; user-select: auto; -webkit-user-select: auto; }
+            .music-notes-key-card { width: min(320px, 100%); padding: 16px; border: 1px solid #555; border-radius: 6px; background: #292a2d; color: #eee; box-shadow: 0 8px 30px #0008; }
+            .music-notes-key-card h2 { margin: 0 0 14px; font-size: 16px; }
+            .music-notes-key-card label { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
+            .music-notes-key-card select { flex: 1; min-width: 0; height: 32px; background: #343538; color: #fff; border: 1px solid #555; border-radius: 3px; }
+            .music-notes-key-card button { min-width: 72px; height: 32px; padding: 0 10px; border: 1px solid #555; border-radius: 3px; background: #343538; color: #eee; cursor: pointer; }
+            .music-notes-key-card button:hover { background: #444; }
+            .music-notes-key-card .music-notes-key-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
             .music-notes-revision { color: #aaa; font: 11px ui-monospace, monospace; padding: 0 4px; }
             .music-notes-transport .duration.flash { animation: music-notes-duration-flash .18s ease-in-out 2 alternate; }
             @keyframes music-notes-duration-flash { to { background: #f1d34a; color: #332900; border-color: #ffe985; } }
@@ -42,7 +52,7 @@ window.MusicNotes.mount = function(editorElement, host) {
     }
     host.innerHTML = `<section class="music-notes-dock" aria-label="Piano roll">
         <div class="music-notes-transport">
-            <div class="music-notes-cluster"><button id="new-tune" type="button" title="Insert a new ABC tune header" aria-label="New tune">N</button></div>
+            <div class="music-notes-cluster"><button id="new-tune" type="button" title="Insert a new ABC tune header" aria-label="New tune">N</button><button id="key-settings" type="button" title="Set tune key">K:</button></div>
             <div class="music-notes-cluster">
                 <label class="music-notes-slider" title="Volume">Vol <input id="volume" type="range" min="0" max="3.5" value="2" step="0.05"></label>
                 <label class="music-notes-slider" title="Release fade">Rel <input id="release" type="range" min="0" max="3000" value="140" step="10"><output id="release-value">140</output></label>
@@ -73,7 +83,15 @@ window.MusicNotes.mount = function(editorElement, host) {
                 <button type="button" data-record-text=" :| " title="Insert repeat end">:|</button>
                 <button type="button" data-record-newline="true" title="Insert newline">\\n</button>
             </div>
-            <div class="music-notes-cluster music-notes-revision" aria-label="Revision 9">R.9</div>
+            <div class="music-notes-cluster music-notes-revision" aria-label="Revision 10">R.10</div>
+        </div>
+        <div id="music-key-dialog" class="music-notes-key-dialog" hidden>
+            <div class="music-notes-key-card" role="dialog" aria-modal="true" aria-labelledby="music-key-title">
+                <h2 id="music-key-title">Tune key</h2>
+                <label>Key <select id="music-key-select"></select></label>
+                <label><input id="music-key-transpose" type="checkbox"> Transpose notes</label>
+                <div class="music-notes-key-actions"><button id="music-key-cancel" type="button">Cancel</button><button id="music-key-ok" type="button">OK</button></div>
+            </div>
         </div>
         <div class="music-notes-roll-frame"><div id="roll" class="music-notes-roll" aria-label="Piano keyboard" tabindex="0"><div id="keys" class="music-notes-keys"></div></div></div>
     </section>`;
@@ -94,6 +112,33 @@ function initializeMusicNotes(editorElement, host) {
             const beatFrequency = host.querySelector('#beat-frequency');
             const playPauseButton = host.querySelector('#play-pause');
             const metronomeButton = host.querySelector('#metronome');
+            const keyDialog = host.querySelector('#music-key-dialog');
+            const keySelect = host.querySelector('#music-key-select');
+            const keyTranspose = host.querySelector('#music-key-transpose');
+            const keySignatures = Object.freeze({
+                C: [], G: ['^F'], D: ['^F', '^C'], A: ['^F', '^C', '^G'], E: ['^F', '^C', '^G', '^D'],
+                B: ['^F', '^C', '^G', '^D', '^A'], 'F#': ['^F', '^C', '^G', '^D', '^A', '^E'],
+                'C#': ['^F', '^C', '^G', '^D', '^A', '^E', '^B'],
+                F: ['_B'], Bb: ['_B', '_E'], Eb: ['_B', '_E', '_A'], Ab: ['_B', '_E', '_A', '_D'],
+                Db: ['_B', '_E', '_A', '_D', '_G'], Gb: ['_B', '_E', '_A', '_D', '_G', '_C'],
+                Cb: ['_B', '_E', '_A', '_D', '_G', '_C', '_F'],
+                'G#': ['^^F', '^C', '^G', '^D', '^A', '^E', '^B'],
+                'D#': ['^^F', '^^C', '^G', '^D', '^A', '^E', '^B'],
+                'A#': ['^^F', '^^C', '^^G', '^D', '^A', '^E', '^B'],
+                'E#': ['^^F', '^^C', '^^G', '^^D', '^A', '^E', '^B'],
+                'B#': ['^^F', '^^C', '^^G', '^^D', '^^A', '^E', '^B']
+            });
+            const relativeKeyLookup = Object.freeze({
+                C: 'C', G: 'G', D: 'D', A: 'A', E: 'E', B: 'B', 'F#': 'F#', 'C#': 'C#',
+                F: 'F', Bb: 'Bb', Eb: 'Eb', Ab: 'Ab', Db: 'Db', Gb: 'Gb', Cb: 'Cb',
+                'A#': 'A#', 'D#': 'D#', 'G#': 'G#', 'E#': 'E#', 'B#': 'B#',
+                Am: 'C', 'A#m': 'C#', Bm: 'D', Cm: 'Eb', 'C#m': 'E', Dm: 'F', 'D#m': 'F#',
+                Em: 'G', Fm: 'Ab', 'F#m': 'A', Gm: 'Bb', 'G#m': 'B',
+                Bbm: 'Db', Ebm: 'Gb', Abm: 'Cb', Dbm: 'E', Gbm: 'A', Cbm: 'Eb'
+            });
+            const keyOptionValues = [...musicKeyRoots, ...musicKeyRoots.map(root => `${root}m`)];
+            keySelect.innerHTML = keyOptionValues.map(key => `<option value="${key}">${key}</option>`).join('');
+            let currentKey = 'C';
             let whiteWidth = Number(readSetting('pianoWhiteKeyWidth')) || 48;
             let blackWidth = whiteWidth * 0.625;
             const minMidi = 21, maxMidi = 108;
@@ -102,9 +147,8 @@ function initializeMusicNotes(editorElement, host) {
             const midiSamples = new Map(), sampleFiles = new Map(), decodedSamples = new Map(), activeVoices = new Map(), keyVoiceCounts = new Map(), pointerStates = new Map();
             let audioContext = null, compressor = null, nextVoice = 1, whiteCount = 0;
             let sampleArchivePromise = null;
-            let events = [], preparedText = '', totalMs = 0, metronomeBeatMs = 500, abcQpm = 120, abcUnitLength = 1 / 8, playbackState = 'stopped', playbackElapsed = 0, playbackStartedAt = 0, playbackRate = 1, playbackRun = 0, recording = false, metronomeEnabled = false, historyMutation = false;
+            let events = [], preparedText = '', totalMs = 0, metronomeBeatMs = 500, abcQpm = 120, abcUnitLength = 1 / 8, playbackState = 'stopped', playbackElapsed = 0, playbackStartedAt = 0, playbackRate = 1, playbackRun = 0, recording = false, metronomeEnabled = false;
             let playbackTimers = new Set(), metronomeTimers = new Set(), playbackVoices = new Set(), previewVoices = new Set(), previewTimers = new Set();
-            const recordedAccidentals = new Map();
             let lastPointerNote = null;
 
             function readSetting(key) { try { return window.localStorage.getItem(`musicNotepad.${key}`); } catch { return null; } }
@@ -131,6 +175,113 @@ function initializeMusicNotes(editorElement, host) {
                 return (Number(match[3]) + 1) * 12 + semitones + (match[2] === '#' ? 1 : match[2] === 'b' ? -1 : 0);
             }
             function noteName(midi) { return noteNames[midi % 12] + (Math.floor(midi / 12) - 1); }
+            const naturalSemitones = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+            const letterIndexes = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+            const majorScale = [0, 2, 4, 5, 7, 9, 11], minorScale = [0, 2, 3, 5, 7, 8, 10];
+            function normalizeTuneKey(key) {
+                const match = /^([A-G])([#b]?)(m?)$/i.exec(String(key || ''));
+                return match ? match[1].toUpperCase() + match[2] + match[3].toLowerCase() : 'C';
+            }
+            function keyTonic(key) {
+                key = normalizeTuneKey(key);
+                const minor = key.endsWith('m'), root = minor ? key.slice(0, -1) : key;
+                const letter = root[0], alteration = root[1] === '#' ? 1 : root[1] === 'b' ? -1 : 0;
+                return { key, root, letter, letterIndex: letterIndexes[letter], minor, midi: 60 + naturalSemitones[letter] + alteration, diatonic: 28 + letterIndexes[letter] };
+            }
+            function keyMajorName(key) { key = normalizeTuneKey(key); return relativeKeyLookup[key] || key; }
+            function signatureEntries(key) { return keySignatures[keyMajorName(key)] || []; }
+            function signatureAlteration(key, letter) {
+                const item = signatureEntries(key).find(value => value.endsWith(letter));
+                return item ? accidentalValue(item.slice(0, -1)) : 0;
+            }
+            function prefersSharps(key) {
+                const first = signatureEntries(key)[0];
+                return first ? first[0] === '^' : true;
+            }
+            function keyForDropdown(key) {
+                key = normalizeTuneKey(key);
+                const minor = key.endsWith('m'), root = minor ? key.slice(0, -1) : key;
+                const aliases = { Bb: 'A#', Eb: 'D#', Ab: 'G#', Db: 'C#', Gb: 'F#', Cb: 'B', Fb: 'E', 'E#': 'F', 'B#': 'C' };
+                const option = (aliases[root] || root) + (minor ? 'm' : '');
+                return keyOptionValues.includes(option) ? option : 'C';
+            }
+            function headerInfo(text) {
+                let offset = 0, headerEnd = 0, bodyStart = text.length, keyField = null;
+                while (offset < text.length) {
+                    const newline = text.indexOf('\n', offset), end = newline < 0 ? text.length : newline + 1;
+                    const line = text.slice(offset, newline < 0 ? text.length : newline).replace(/\r$/, '');
+                    if (/^\s*[A-Za-z]\s*:/.test(line)) {
+                        headerEnd = end;
+                        const match = /^([ \t]*K[ \t]*:[ \t]*)([^ \t\r\n]*)(.*)$/i.exec(line);
+                        if (!keyField && match) keyField = { start: offset, end, prefix: match[1], value: match[2], suffix: match[3] };
+                    } else if (!line.trim() || /^\s*%/.test(line)) {
+                        // Blank lines and header comments do not end the field block.
+                    } else {
+                        bodyStart = offset;
+                        break;
+                    }
+                    offset = end;
+                }
+                const parsed = keyField && /^([A-G][#b]?m?)/i.exec(keyField.value);
+                return { headerEnd, bodyStart, keyField, key: parsed ? normalizeTuneKey(parsed[1]) : 'C' };
+            }
+            function setHeaderKey(text, key) {
+                const info = headerInfo(text), newline = text.includes('\r\n') ? '\r\n' : '\n';
+                if (info.keyField) {
+                    const field = info.keyField;
+                    const line = text.slice(field.start, field.end).replace(/[\r\n]+$/, '');
+                    const match = /^([ \t]*K[ \t]*:[ \t]*)([^ \t]*)(.*)$/i.exec(line);
+                    const replacement = `${match[1]}${key}${match[3]}`;
+                    return text.slice(0, field.start) + replacement + text.slice(field.start + line.length);
+                }
+                const at = info.headerEnd;
+                const prefix = at > 0 && text[at - 1] !== '\n' ? newline : '';
+                return text.slice(0, at) + prefix + `K:${key}${newline}` + text.slice(at);
+            }
+            function accidentalValue(prefix) {
+                if (!prefix) return null;
+                if (prefix[0] === '=') return 0;
+                return (prefix[0] === '^' ? 1 : -1) * prefix.length;
+            }
+            function accidentalPrefix(alteration) {
+                if (alteration === 0) return '=';
+                return alteration > 0 ? '^'.repeat(alteration) : '_'.repeat(-alteration);
+            }
+            function scanAbcNotes(text, start, onNote, onBar = () => {}) {
+                const overrides = new Map();
+                let i = Math.max(0, start);
+                while (i < text.length) {
+                    const lineStart = i === 0 || text[i - 1] === '\n' ? i : -1;
+                    if (lineStart >= 0) {
+                        const lineEnd = text.indexOf('\n', lineStart), line = text.slice(lineStart, lineEnd < 0 ? text.length : lineEnd);
+                        if (/^[ \t]*(?:w|W|V|s|r):/.test(line)) { i = lineEnd < 0 ? text.length : lineEnd + 1; continue; }
+                    }
+                    const ch = text[i];
+                    if (ch === '%') { const end = text.indexOf('\n', i); i = end < 0 ? text.length : end + 1; continue; }
+                    if (ch === '"' || ch === '!' || ch === '+') {
+                        const end = text.indexOf(ch, i + 1); i = end < 0 ? text.length : end + 1; continue;
+                    }
+                    if (ch === '|') { overrides.clear(); onBar(); i++; continue; }
+                    let noteStart = i, prefix = '';
+                    if ('^_='.includes(ch)) {
+                        const accidentalChar = ch;
+                        while (i < text.length && text[i] === accidentalChar && prefix.length < 2) prefix += text[i++];
+                    }
+                    const letter = text[i];
+                    if (!letter || !/[A-Ga-g]/.test(letter)) { i = Math.max(i + 1, noteStart + 1); continue; }
+                    const noteIndex = i++;
+                    while (i < text.length && (text[i] === "'" || text[i] === ',')) i++;
+                    const token = { start: noteStart, end: i, letter: letter.toUpperCase(), lower: letter === letter.toLowerCase(), octaveMarks: text.slice(noteIndex + 1, i), prefix, explicitAlteration: accidentalValue(prefix) };
+                    token.octave = (token.lower ? 5 : 4) + [...token.octaveMarks].filter(mark => mark === "'").length - [...token.octaveMarks].filter(mark => mark === ',').length;
+                    onNote(token, overrides);
+                }
+                return overrides;
+            }
+            function currentTuneKey(text = editor.value) { return headerInfo(text).key; }
+            function refreshTuneKey() {
+                currentKey = currentTuneKey();
+                keySelect.value = keyForDropdown(currentKey);
+            }
             function midiFor(note) {
                 if (Number.isInteger(note)) return note;
                 return typeof note === 'string' ? midiFromName(note.replace('♯', '#').replace('♭', 'b')) : null;
@@ -401,42 +552,77 @@ function initializeMusicNotes(editorElement, host) {
                 oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
             }
             function noteToken(midi) {
-                const pitchClass = midi % 12, octave = Math.floor(midi / 12) - 1;
-                const spellings = [
-                    ['C', 0], ['C', 1], ['D', 0], ['D', 1], ['E', 0], ['F', 0],
-                    ['F', 1], ['G', 0], ['G', 1], ['A', 0], ['A', 1], ['B', 0]
-                ];
-                const [letter, accidental] = spellings[pitchClass], key = `${letter}:${octave}`;
-                const previousAccidental = recordedAccidentals.has(key) ? recordedAccidentals.get(key) : null;
-                let prefix = '';
-                if (accidental !== 0) {
-                    if (previousAccidental !== accidental) prefix = accidental > 0 ? '^' : '_';
-                } else if (previousAccidental !== null && previousAccidental !== 0) prefix = '=';
-                recordedAccidentals.set(key, accidental);
+                const pitchClass = ((midi % 12) + 12) % 12, octave = Math.floor(midi / 12) - 1;
+                const spellings = prefersSharps(currentKey)
+                    ? [['C', 0], ['C', 1], ['D', 0], ['D', 1], ['E', 0], ['F', 0], ['F', 1], ['G', 0], ['G', 1], ['A', 0], ['A', 1], ['B', 0]]
+                    : [['C', 0], ['D', -1], ['D', 0], ['E', -1], ['E', 0], ['F', 0], ['G', -1], ['G', 0], ['A', -1], ['A', 0], ['B', -1], ['B', 0]];
+                const [letter, accidental] = spellings[pitchClass], source = editor.value, caret = editor.selectionStart;
+                const info = headerInfo(source), overrideKey = `${letter}:${octave}`;
+                const overrides = scanAbcNotes(source.slice(0, caret), info.bodyStart, (token, activeOverrides) => {
+                    if (token.explicitAlteration !== null) activeOverrides.set(`${token.letter}:${token.octave}`, token.explicitAlteration);
+                });
+                const existingAlteration = overrides.has(overrideKey) ? overrides.get(overrideKey) : signatureAlteration(currentKey, letter);
+                const prefix = accidental === existingAlteration ? '' : accidentalPrefix(accidental);
                 let note = octave >= 5 ? letter.toLowerCase() + "'".repeat(octave - 5) : letter + ','.repeat(Math.max(0, 4 - octave));
-                return { text: prefix + note, key, previousAccidental, accidental };
+                return { text: prefix + note };
             }
-            function applyEditorText(token, start, replaced, direction, spelling = null) {
+            function transposeTuneNotes(text, oldKey, newKey) {
+                const start = headerInfo(text).bodyStart;
+                const sourceTonic = keyTonic(oldKey), targetTonic = keyTonic(newKey);
+                const sourceScale = sourceTonic.minor ? minorScale : majorScale;
+                const targetScale = targetTonic.minor ? minorScale : majorScale;
+                const letters = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+                const targetOverrides = new Map(), replacements = [];
+                scanAbcNotes(text, start, (token, sourceOverrides) => {
+                    const sourceStateKey = `${token.letter}:${token.octave}`;
+                    const sourceAlteration = token.explicitAlteration !== null
+                        ? token.explicitAlteration
+                        : sourceOverrides.has(sourceStateKey) ? sourceOverrides.get(sourceStateKey) : signatureAlteration(oldKey, token.letter);
+                    if (token.explicitAlteration !== null) sourceOverrides.set(sourceStateKey, sourceAlteration);
+
+                    const sourceNatural = (token.octave + 1) * 12 + naturalSemitones[token.letter];
+                    const sourceMidi = sourceNatural + sourceAlteration;
+                    const sourceDiatonic = token.octave * 7 + letterIndexes[token.letter];
+                    const degreeOffset = sourceDiatonic - sourceTonic.diatonic;
+                    const degree = ((degreeOffset % 7) + 7) % 7;
+                    const octaveOffset = Math.floor(degreeOffset / 7);
+                    const relationshipAlteration = sourceMidi - sourceTonic.midi - sourceScale[degree] - octaveOffset * 12;
+
+                    const targetDiatonic = targetTonic.diatonic + degreeOffset;
+                    const targetOctave = Math.floor(targetDiatonic / 7);
+                    const targetLetter = letters[((targetDiatonic % 7) + 7) % 7];
+                    const targetMidi = targetTonic.midi + targetScale[degree] + octaveOffset * 12 + relationshipAlteration;
+                    const targetNatural = (targetOctave + 1) * 12 + naturalSemitones[targetLetter];
+                    const wantedAlteration = targetMidi - targetNatural;
+                    const targetStateKey = `${targetLetter}:${targetOctave}`;
+                    const currentAlteration = targetOverrides.has(targetStateKey)
+                        ? targetOverrides.get(targetStateKey) : signatureAlteration(newKey, targetLetter);
+                    const prefix = wantedAlteration === currentAlteration ? '' : accidentalPrefix(wantedAlteration);
+                    if (prefix) targetOverrides.set(targetStateKey, wantedAlteration);
+
+                    const outputLetter = targetOctave >= 5 ? targetLetter.toLowerCase() : targetLetter;
+                    const octaveMarks = targetOctave >= 5 ? "'".repeat(targetOctave - 5) : ','.repeat(Math.max(0, 4 - targetOctave));
+                    replacements.push({ start: token.start, end: token.end, text: prefix + outputLetter + octaveMarks });
+                }, () => targetOverrides.clear());
+                for (let i = replacements.length - 1; i >= 0; i--) {
+                    const item = replacements[i];
+                    text = text.slice(0, item.start) + item.text + text.slice(item.end);
+                }
+                return text;
+            }
+            function applyEditorText(token, start, replaced, direction) {
                 const removeLength = direction === 'undo' ? token.length : replaced.length;
                 const insertText = direction === 'undo' ? replaced : token;
-                historyMutation = true;
                 editor.setRangeText(insertText, start, start + removeLength, 'end');
                 editor.dispatchEvent(new Event('input', { bubbles: true }));
-                historyMutation = false;
-                if (spelling?.key) {
-                    if (direction === 'undo') {
-                        if (spelling.previousAccidental === null) recordedAccidentals.delete(spelling.key);
-                        else recordedAccidentals.set(spelling.key, spelling.previousAccidental);
-                    } else recordedAccidentals.set(spelling.key, spelling.accidental);
-                }
             }
-            function insertRecordedText(token, spelling = null) {
+            function insertRecordedText(token) {
                 if (!recording) return;
                 const start = editor.selectionStart, end = editor.selectionEnd;
                 const replaced = editor.value.slice(start, end);
                 const action = {
-                    undo: () => applyEditorText(token, start, replaced, 'undo', spelling),
-                    redo: () => applyEditorText(token, start, replaced, 'redo', spelling)
+                    undo: () => applyEditorText(token, start, replaced, 'undo'),
+                    redo: () => applyEditorText(token, start, replaced, 'redo')
                 };
                 if (typeof window.applyEditorHistoryAction === 'function') window.applyEditorHistoryAction(action);
                 else action.redo();
@@ -444,7 +630,7 @@ function initializeMusicNotes(editorElement, host) {
             function insertRecordedNote(state) {
                 if (!recording || state.midi === null) return;
                 const spelling = noteToken(state.midi);
-                insertRecordedText(spelling.text + (state.recordLength === '1' ? '' : state.recordLength), spelling);
+                insertRecordedText(spelling.text + (state.recordLength === '1' ? '' : state.recordLength));
             }
             function startRecordedKey(state) {
                 if (!recording || state.midi === null) return;
@@ -594,6 +780,27 @@ function initializeMusicNotes(editorElement, host) {
                 editor.dispatchEvent(new Event('input', { bubbles: true }));
                 editor.focus({ preventScroll: true }); editor.setSelectionRange(starter.length, starter.length);
             });
+            function closeKeyDialog() { keyDialog.hidden = true; }
+            host.querySelector('#key-settings').addEventListener('click', () => {
+                refreshTuneKey();
+                keySelect.value = keyForDropdown(currentKey);
+                keyTranspose.checked = false;
+                keyDialog.hidden = false;
+            });
+            host.querySelector('#music-key-cancel').addEventListener('click', closeKeyDialog);
+            keyDialog.addEventListener('click', event => { if (event.target === keyDialog) closeKeyDialog(); });
+            host.querySelector('#music-key-ok').addEventListener('click', () => {
+                const source = editor.value, info = headerInfo(source), nextKey = keySelect.value || 'C';
+                let updated = keyTranspose.checked ? transposeTuneNotes(source, info.key, nextKey) : source;
+                updated = setHeaderKey(updated, nextKey);
+                if (updated !== source) {
+                    const caretStart = editor.selectionStart, caretEnd = editor.selectionEnd;
+                    editor.value = updated;
+                    editor.setSelectionRange(Math.min(caretStart, updated.length), Math.min(caretEnd, updated.length));
+                    editor.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                closeKeyDialog();
+            });
             playPauseButton.addEventListener('click', () => playbackState === 'playing' ? pause() : play());
             host.querySelector('#stop').addEventListener('click', stop);
             metronomeButton.addEventListener('click', () => {
@@ -619,6 +826,7 @@ function initializeMusicNotes(editorElement, host) {
             host.querySelectorAll('[data-record-newline]').forEach(button => button.addEventListener('click', () => insertRecordedText('\n')));
             document.addEventListener('keydown', event => {
                 if (host.hidden) return;
+                if (event.key === 'Escape' && !keyDialog.hidden) { event.preventDefault(); closeKeyDialog(); return; }
                 if (event.ctrlKey && !event.altKey && !event.metaKey && event.key.toLowerCase() === 'z') {
                     const handled = event.shiftKey
                         ? window.redoEditorHistoryAction?.()
@@ -666,9 +874,7 @@ function initializeMusicNotes(editorElement, host) {
                 }
             });
             editor.addEventListener('input', () => {
-                if (!historyMutation) {
-                    recordedAccidentals.clear();
-                }
+                refreshTuneKey();
                 playbackRun++; clearTimers(playbackTimers); clearTimers(metronomeTimers); stopPlaybackVoices(); stopPreview();
                 playbackState = 'stopped'; updatePlaybackControl(); playbackElapsed = 0;
                 preparedText = ''; events = [];
@@ -680,17 +886,18 @@ function initializeMusicNotes(editorElement, host) {
                 pointerStates.clear(); stopAllNotes(); roll.classList.remove('panning');
                 playbackState = 'stopped'; updatePlaybackControl(); playbackElapsed = 0;
                 preparedText = ''; events = [];
-                recordedAccidentals.clear();
+                refreshTuneKey();
             }
 
             window.MusicNotepadPiano = Object.freeze({
                 playNote, stopNote, stopAllNotes, playAbcEvent, stopAbcEvent, midiToNoteName: noteName,
                 range: Object.freeze({ min: minMidi, max: maxMidi }), abcjs: window.ABCJS || null
             });
+            refreshTuneKey();
             buildKeyboard();
             loadSampleArchive().catch(error => console.error(error));
             return Object.freeze({
-                refresh() { resetForEditorChange(); requestAnimationFrame(restorePianoRollPosition); },
+                refresh() { resetForEditorChange(); refreshTuneKey(); requestAnimationFrame(restorePianoRollPosition); },
                 suspend: resetForEditorChange,
                 loadSamples: loadSampleArchive
             });
