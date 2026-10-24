@@ -21,6 +21,7 @@ window.MusicNotes.mount = function(editorElement, host) {
             .music-notes-slider output { min-width: 28px; color: #aaa; font: 10px ui-monospace, monospace; }
             .music-notes-transport button.active { background: #8a2929; border-color: #d66; color: white; }
             .music-notes-transport #record.active { background: #e4c64c; border-color: #fff09a; color: #302700; }
+            .music-notes-transport #loop-toggle.active { background: #526b46; border-color: #91b278; color: #fff; }
             .music-notes-inserts button { background: #183c68; border-color: #376ca7; color: #fff; }
             .music-notes-inserts button:hover { background: #245184; }
             .music-notes-inserts[hidden] { display: none; }
@@ -67,6 +68,7 @@ window.MusicNotes.mount = function(editorElement, host) {
             <div class="music-notes-cluster">
                 <button id="play-pause" type="button" title="Play" aria-label="Play">▷</button>
                 <button id="stop" type="button" title="Stop" aria-label="Stop">■</button>
+                <button id="loop-toggle" type="button" title="Loop playback" aria-label="Loop playback" aria-pressed="true" class="active">↻</button>
                 <label class="music-notes-slider" title="Playback speed">Speed <input id="speed" type="range" min="0.25" max="1.5" value="1" step="0.05"><output id="speed-value">1×</output></label>
             </div>
             <div class="music-notes-cluster">
@@ -83,12 +85,13 @@ window.MusicNotes.mount = function(editorElement, host) {
                 <button type="button" data-record-text=" :| " title="Insert repeat end">:|</button>
                 <button type="button" data-record-newline="true" title="Insert newline">\\n</button>
             </div>
-            <div class="music-notes-cluster music-notes-revision" aria-label="Revision 10">R.10</div>
+            <div class="music-notes-cluster music-notes-revision" aria-label="Revision 12">R.12</div>
         </div>
         <div id="music-key-dialog" class="music-notes-key-dialog" hidden>
             <div class="music-notes-key-card" role="dialog" aria-modal="true" aria-labelledby="music-key-title">
                 <h2 id="music-key-title">Tune key</h2>
                 <label>Key <select id="music-key-select"></select></label>
+                <label>Octave <select id="music-key-octave"></select></label>
                 <label><input id="music-key-transpose" type="checkbox"> Transpose notes</label>
                 <div class="music-notes-key-actions"><button id="music-key-cancel" type="button">Cancel</button><button id="music-key-ok" type="button">OK</button></div>
             </div>
@@ -111,9 +114,11 @@ function initializeMusicNotes(editorElement, host) {
             const noteLength = host.querySelector('#note-length');
             const beatFrequency = host.querySelector('#beat-frequency');
             const playPauseButton = host.querySelector('#play-pause');
+            const loopButton = host.querySelector('#loop-toggle');
             const metronomeButton = host.querySelector('#metronome');
             const keyDialog = host.querySelector('#music-key-dialog');
             const keySelect = host.querySelector('#music-key-select');
+            const octaveSelect = host.querySelector('#music-key-octave');
             const keyTranspose = host.querySelector('#music-key-transpose');
             const keySignatures = Object.freeze({
                 C: [], G: ['^F'], D: ['^F', '^C'], A: ['^F', '^C', '^G'], E: ['^F', '^C', '^G', '^D'],
@@ -138,6 +143,8 @@ function initializeMusicNotes(editorElement, host) {
             });
             const keyOptionValues = [...musicKeyRoots, ...musicKeyRoots.map(root => `${root}m`)];
             keySelect.innerHTML = keyOptionValues.map(key => `<option value="${key}">${key}</option>`).join('');
+            octaveSelect.innerHTML = [-3, -2, -1, 0, 1, 2, 3].map(value => `<option value="${value}">${value}</option>`).join('');
+            octaveSelect.value = '0';
             let currentKey = 'C';
             let whiteWidth = Number(readSetting('pianoWhiteKeyWidth')) || 48;
             let blackWidth = whiteWidth * 0.625;
@@ -145,10 +152,10 @@ function initializeMusicNotes(editorElement, host) {
             const whitePitches = new Set([0, 2, 4, 5, 7, 9, 11]);
             const noteNames = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
             const midiSamples = new Map(), sampleFiles = new Map(), decodedSamples = new Map(), activeVoices = new Map(), keyVoiceCounts = new Map(), pointerStates = new Map();
-            let audioContext = null, compressor = null, nextVoice = 1, whiteCount = 0;
+            let audioContext = null, compressor = null, nextVoice = 1, whiteCount = 0, playbackAudioOrigin = 0;
             let sampleArchivePromise = null;
-            let events = [], preparedText = '', totalMs = 0, metronomeBeatMs = 500, abcQpm = 120, abcUnitLength = 1 / 8, playbackState = 'stopped', playbackElapsed = 0, playbackStartedAt = 0, playbackRate = 1, playbackRun = 0, recording = false, metronomeEnabled = false;
-            let playbackTimers = new Set(), metronomeTimers = new Set(), playbackVoices = new Set(), previewVoices = new Set(), previewTimers = new Set();
+            let events = [], preparedText = '', totalMs = 0, metronomeBeatMs = 500, abcQpm = 120, abcUnitLength = 1 / 8, playbackState = 'stopped', playbackElapsed = 0, playbackRate = 1, playbackRun = 0, recording = false, metronomeEnabled = false;
+            let playbackTimers = new Set(), metronomeNodes = new Set(), playbackVoices = new Set(), previewVoices = new Set(), previewTimers = new Set();
             let lastPointerNote = null;
 
             function readSetting(key) { try { return window.localStorage.getItem(`musicNotepad.${key}`); } catch { return null; } }
@@ -165,6 +172,9 @@ function initializeMusicNotes(editorElement, host) {
             metronomeEnabled = readSetting('metronome') === 'true';
             metronomeButton.classList.toggle('active', metronomeEnabled);
             metronomeButton.setAttribute('aria-pressed', String(metronomeEnabled));
+            let loopPlayback = readSetting('loopPlayback') !== 'false';
+            loopButton.classList.toggle('active', loopPlayback);
+            loopButton.setAttribute('aria-pressed', String(loopPlayback));
             document.documentElement.style.setProperty('--white-key', `${whiteWidth}px`);
             document.documentElement.style.setProperty('--black-key', `${blackWidth}px`);
 
@@ -398,26 +408,57 @@ function initializeMusicNotes(editorElement, host) {
                 }
                 return decodedSamples.get(name);
             }
-            function playNote(note, voiceId, velocity = 127) {
+            function playNote(note, voiceId, velocity = 127, startAt = null, endAt = null) {
                 const midi = midiFor(note);
                 if (!Number.isInteger(midi) || midi < minMidi || midi > maxMidi) return null;
                 voiceId ??= `voice-${nextVoice++}`;
                 if (activeVoices.has(voiceId)) stopNote(voiceId);
-                const voice = { midi, source: null, gain: null, released: false };
-                activeVoices.set(voiceId, voice); setKeyGlow(midi, true);
+                const voice = { midi, source: null, gain: null, released: false, scheduledStart: startAt, glowing: false, glowTimer: null, glowOffTimer: null };
+                activeVoices.set(voiceId, voice);
+                if (startAt === null) { setKeyGlow(midi, true); voice.glowing = true; }
                 try {
-                    getAudioContext();
+                    const context = getAudioContext();
+                    const requestedStart = startAt === null ? context.currentTime : startAt;
                     loadSampleArchive().then(() => {
                         const sample = midiSamples.get(midi);
                         if (!sample) throw new Error(`No piano sample is mapped for MIDI note ${midi}.`);
                         return decodeSample(sample);
                     }).then(buffer => {
                         if (voice.released || activeVoices.get(voiceId) !== voice) return;
-                        const source = audioContext.createBufferSource(), gain = audioContext.createGain();
-                        source.buffer = buffer; gain.gain.value = Number(volume.value) * Math.max(0, Number(velocity) / 127);
+                        const source = context.createBufferSource(), gain = context.createGain();
+                        const actualStart = Math.max(requestedStart, context.currentTime + 0.005);
+                        const level = Number(volume.value) * Math.max(0, Number(velocity) / 127);
+                        source.buffer = buffer; gain.gain.setValueAtTime(level, actualStart);
                         source.connect(gain); gain.connect(compressor);
-                        source.onended = () => { source.disconnect(); gain.disconnect(); voice.source = voice.gain = null; };
-                        voice.source = source; voice.gain = gain; source.start();
+                        source.onended = () => {
+                            source.disconnect(); gain.disconnect(); voice.source = voice.gain = null;
+                            if (activeVoices.get(voiceId) === voice) activeVoices.delete(voiceId);
+                            if (voice.glowTimer) clearTimeout(voice.glowTimer);
+                            if (voice.glowOffTimer) clearTimeout(voice.glowOffTimer);
+                            if (voice.glowing) { setKeyGlow(midi, false); voice.glowing = false; }
+                            playbackVoices.delete(voiceId);
+                        };
+                        voice.source = source; voice.gain = gain;
+                        if (!voice.glowing) {
+                            const glowDelay = Math.max(0, (actualStart - context.currentTime) * 1000);
+                            voice.glowTimer = setTimeout(() => {
+                                voice.glowTimer = null;
+                                if (!voice.released && activeVoices.get(voiceId) === voice) { setKeyGlow(midi, true); voice.glowing = true; }
+                            }, glowDelay);
+                        }
+                        source.start(actualStart);
+                        if (endAt !== null) {
+                            const noteEnd = Math.max(actualStart, endAt), seconds = Number(release.value) / 1000;
+                            gain.gain.setValueAtTime(level, noteEnd);
+                            if (seconds > 0) gain.gain.linearRampToValueAtTime(0, noteEnd + seconds);
+                            const stopAt = seconds > 0 ? noteEnd + seconds : noteEnd;
+                            source.stop(stopAt);
+                            const glowOffDelay = Math.max(0, (noteEnd - context.currentTime) * 1000);
+                            voice.glowOffTimer = setTimeout(() => {
+                                voice.glowOffTimer = null;
+                                if (voice.glowing) { setKeyGlow(midi, false); voice.glowing = false; }
+                            }, glowOffDelay);
+                        }
                     }).catch(error => { console.error(error); stopNote(voiceId); });
                 } catch (error) { console.error(error); stopNote(voiceId); return null; }
                 return voiceId;
@@ -425,10 +466,17 @@ function initializeMusicNotes(editorElement, host) {
             function stopNote(voiceId) {
                 const voice = activeVoices.get(voiceId);
                 if (!voice) return;
-                activeVoices.delete(voiceId); voice.released = true; setKeyGlow(voice.midi, false);
+                activeVoices.delete(voiceId); voice.released = true;
+                if (voice.glowTimer) clearTimeout(voice.glowTimer);
+                if (voice.glowOffTimer) clearTimeout(voice.glowOffTimer);
+                if (voice.glowing) { setKeyGlow(voice.midi, false); voice.glowing = false; }
                 if (!voice.source || !voice.gain) return;
-                const now = audioContext.currentTime, seconds = Number(release.value) / 1000;
+                const now = audioContext.currentTime;
                 const gain = voice.gain, source = voice.source, current = Math.max(0.0001, gain.gain.value);
+                if (voice.scheduledStart !== null && voice.scheduledStart > now) {
+                    gain.gain.cancelScheduledValues(now); gain.gain.setValueAtTime(0, now); source.stop(now); return;
+                }
+                const seconds = Number(release.value) / 1000;
                 gain.gain.cancelScheduledValues(now); gain.gain.setValueAtTime(current, now);
                 if (seconds > 0) { gain.gain.linearRampToValueAtTime(0, now + seconds); source.stop(now + seconds); }
                 else source.stop(now);
@@ -444,12 +492,19 @@ function initializeMusicNotes(editorElement, host) {
             function clearTimers(timers) { for (const id of timers) clearTimeout(id); timers.clear(); }
             function updatePlaybackControl() {
                 const playing = playbackState === 'playing';
-                playPauseButton.textContent = playing ? 'Ⅱ' : '▷';
-                playPauseButton.title = playing ? 'Pause' : 'Play';
-                playPauseButton.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+                playPauseButton.textContent = playbackState === 'loading' ? '…' : playing ? 'Ⅱ' : '▷';
+                playPauseButton.title = playbackState === 'loading' ? 'Loading samples' : playing ? 'Pause' : 'Play';
+                playPauseButton.setAttribute('aria-label', playbackState === 'loading' ? 'Loading samples' : playing ? 'Pause' : 'Play');
             }
             function stopPlaybackVoices() { for (const id of playbackVoices) stopNote(id); playbackVoices.clear(); }
             function stopPreview() { clearTimers(previewTimers); for (const id of previewVoices) stopNote(id); previewVoices.clear(); }
+            function clearMetronome() {
+                if (audioContext) for (const node of metronomeNodes) { try { node.stop(audioContext.currentTime); } catch {} }
+                metronomeNodes.clear();
+            }
+            function currentPlaybackPosition() {
+                return audioContext ? Math.max(0, Math.min(totalMs, (audioContext.currentTime - playbackAudioOrigin) * 1000 * playbackRate)) : playbackElapsed;
+            }
             function updateMetronomeBeat() {
                 const [numerator, denominator = 1] = beatFrequency.value.split('/').map(Number);
                 const multiplier = numerator / denominator;
@@ -496,60 +551,90 @@ function initializeMusicNotes(editorElement, host) {
                 const id = setTimeout(() => { timers.delete(id); if (run === playbackRun) callback(); }, Math.max(0, delay));
                 timers.add(id);
             }
-            function scheduleMetronome(fromMs, run, rate) {
-                clearTimers(metronomeTimers);
+            function scheduleMetronome(fromMs, audioStartTime, rate) {
+                clearMetronome();
                 if (!metronomeEnabled) return;
                 for (let beatMs = 0; beatMs < totalMs; beatMs += metronomeBeatMs) {
                     if (beatMs < fromMs - 1) continue;
-                    later(metronomeClick, (beatMs - fromMs) / rate, run, metronomeTimers);
+                    metronomeClick(audioStartTime + (beatMs - fromMs) / (1000 * rate));
                 }
             }
+            function finishPlayback() {
+                playbackRun++; clearTimers(playbackTimers); clearMetronome(); stopPlaybackVoices();
+                playbackState = 'stopped'; playbackElapsed = totalMs; updatePlaybackControl();
+            }
             function startFrom(milliseconds) {
-                clearTimers(playbackTimers); clearTimers(metronomeTimers); stopPlaybackVoices(); stopPreview();
+                clearTimers(playbackTimers); clearMetronome(); stopPlaybackVoices(); stopPreview();
                 playbackElapsed = Math.max(0, Math.min(totalMs, milliseconds));
                 const rate = Number(host.querySelector('#speed').value);
-                playbackRate = rate; playbackStartedAt = performance.now() - playbackElapsed / rate; playbackState = 'playing'; updatePlaybackControl();
+                const leadSeconds = 0.12;
+                playbackRate = rate; playbackState = 'playing'; updatePlaybackControl();
                 const run = ++playbackRun;
+                const audioStartTime = audioContext.currentTime + leadSeconds;
+                playbackAudioOrigin = audioStartTime - playbackElapsed / (1000 * rate);
                 for (const event of events) for (let pitchIndex = 0; pitchIndex < event.notes.length; pitchIndex++) {
                     const pitch = event.notes[pitchIndex], id = `play-${run}-${event.index}-${pitchIndex}`;
                     if (event.endMs <= playbackElapsed) continue;
-                    later(() => { const voice = playNote(pitch.midi, id, pitch.velocity); if (voice !== null) playbackVoices.add(id); }, (event.startMs - playbackElapsed) / rate, run);
-                    later(() => { stopNote(id); playbackVoices.delete(id); }, (event.endMs - playbackElapsed) / rate, run);
+                    const startAt = audioStartTime + (event.startMs - playbackElapsed) / (1000 * rate);
+                    const endAt = audioStartTime + (event.endMs - playbackElapsed) / (1000 * rate);
+                    if (playNote(pitch.midi, id, pitch.velocity, startAt, endAt) !== null) playbackVoices.add(id);
                 }
-                scheduleMetronome(playbackElapsed, run, rate);
+                scheduleMetronome(playbackElapsed, audioStartTime, rate);
                 later(() => {
-                    startFrom(0);
-                }, (totalMs - playbackElapsed) / rate, run);
+                    if (loopPlayback) startFrom(0);
+                    else finishPlayback();
+                }, leadSeconds * 1000 + (totalMs - playbackElapsed) / rate, run);
             }
-            function play() {
-                if (playbackState === 'playing') return;
+            async function play() {
+                if (playbackState === 'playing' || playbackState === 'loading') return;
                 if (!prepareTune()) return;
                 if (playbackState === 'stopped') {
                     const cursor = editor.selectionStart;
                     const next = events.find(event => event.endChar >= cursor) || events[0];
                     playbackElapsed = next.startMs;
                 } else if (playbackElapsed >= totalMs) playbackElapsed = 0;
+                const request = ++playbackRun;
+                playbackState = 'loading'; updatePlaybackControl();
+                const context = getAudioContext();
+                try {
+                    await context.resume();
+                    await loadSampleArchive();
+                    const notes = [...new Set(events.filter(event => event.endMs > playbackElapsed).flatMap(event => event.notes.map(note => note.midi)))];
+                    await Promise.all(notes.map(midi => {
+                        const sample = midiSamples.get(midi);
+                        if (!sample) throw new Error(`No piano sample is mapped for MIDI note ${midi}.`);
+                        return decodeSample(sample);
+                    }));
+                } catch (error) {
+                    console.error('Could not prepare piano samples for playback:', error);
+                    if (request === playbackRun) { playbackState = 'stopped'; updatePlaybackControl(); }
+                    return;
+                }
+                if (request !== playbackRun) return;
                 startFrom(playbackElapsed);
             }
             function pause() {
+                if (playbackState === 'loading') {
+                    playbackRun++; playbackState = 'paused'; updatePlaybackControl(); return;
+                }
                 if (playbackState !== 'playing') return;
-                playbackElapsed = Math.min(totalMs, (performance.now() - playbackStartedAt) * playbackRate);
-                playbackState = 'paused'; updatePlaybackControl(); playbackRun++; clearTimers(playbackTimers); clearTimers(metronomeTimers); stopPlaybackVoices();
+                playbackElapsed = currentPlaybackPosition();
+                playbackState = 'paused'; updatePlaybackControl(); playbackRun++; clearTimers(playbackTimers); clearMetronome(); stopPlaybackVoices();
             }
             function stop() {
-                playbackRun++; clearTimers(playbackTimers); clearTimers(metronomeTimers); stopPlaybackVoices(); stopPreview();
+                playbackRun++; clearTimers(playbackTimers); clearMetronome(); stopPlaybackVoices(); stopPreview();
                 playbackState = 'stopped'; updatePlaybackControl(); playbackElapsed = 0;
                 editor.setSelectionRange(0, 0);
             }
-            function metronomeClick() {
+            function metronomeClick(when = audioContext.currentTime) {
                 if (!audioContext || audioContext.state !== 'running') getAudioContext();
-                const now = audioContext.currentTime, oscillator = audioContext.createOscillator(), gain = audioContext.createGain();
+                const now = Math.max(when, audioContext.currentTime + 0.005), oscillator = audioContext.createOscillator(), gain = audioContext.createGain();
                 oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(1050, now);
                 gain.gain.setValueAtTime(0.0001, now); gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, Number(volume.value) * 0.45), now + 0.003);
                 gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.065);
                 oscillator.connect(gain); gain.connect(compressor);
-                oscillator.start(now); oscillator.stop(now + 0.07);
-                oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+                oscillator.start(now); oscillator.stop(now + 0.07); metronomeNodes.add(oscillator);
+                oscillator.onended = () => { metronomeNodes.delete(oscillator); oscillator.disconnect(); gain.disconnect(); };
             }
             function noteToken(midi) {
                 const pitchClass = ((midi % 12) + 12) % 12, octave = Math.floor(midi / 12) - 1;
@@ -566,7 +651,7 @@ function initializeMusicNotes(editorElement, host) {
                 let note = octave >= 5 ? letter.toLowerCase() + "'".repeat(octave - 5) : letter + ','.repeat(Math.max(0, 4 - octave));
                 return { text: prefix + note };
             }
-            function transposeTuneNotes(text, oldKey, newKey) {
+            function transposeTuneNotes(text, oldKey, newKey, octaveShift = 0) {
                 const start = headerInfo(text).bodyStart;
                 const sourceTonic = keyTonic(oldKey), targetTonic = keyTonic(newKey);
                 const sourceScale = sourceTonic.minor ? minorScale : majorScale;
@@ -588,10 +673,10 @@ function initializeMusicNotes(editorElement, host) {
                     const octaveOffset = Math.floor(degreeOffset / 7);
                     const relationshipAlteration = sourceMidi - sourceTonic.midi - sourceScale[degree] - octaveOffset * 12;
 
-                    const targetDiatonic = targetTonic.diatonic + degreeOffset;
+                    const targetDiatonic = targetTonic.diatonic + degreeOffset + octaveShift * 7;
                     const targetOctave = Math.floor(targetDiatonic / 7);
                     const targetLetter = letters[((targetDiatonic % 7) + 7) % 7];
-                    const targetMidi = targetTonic.midi + targetScale[degree] + octaveOffset * 12 + relationshipAlteration;
+                    const targetMidi = targetTonic.midi + targetScale[degree] + (octaveOffset + octaveShift) * 12 + relationshipAlteration;
                     const targetNatural = (targetOctave + 1) * 12 + naturalSemitones[targetLetter];
                     const wantedAlteration = targetMidi - targetNatural;
                     const targetStateKey = `${targetLetter}:${targetOctave}`;
@@ -784,6 +869,7 @@ function initializeMusicNotes(editorElement, host) {
             host.querySelector('#key-settings').addEventListener('click', () => {
                 refreshTuneKey();
                 keySelect.value = keyForDropdown(currentKey);
+                octaveSelect.value = '0';
                 keyTranspose.checked = false;
                 keyDialog.hidden = false;
             });
@@ -791,7 +877,10 @@ function initializeMusicNotes(editorElement, host) {
             keyDialog.addEventListener('click', event => { if (event.target === keyDialog) closeKeyDialog(); });
             host.querySelector('#music-key-ok').addEventListener('click', () => {
                 const source = editor.value, info = headerInfo(source), nextKey = keySelect.value || 'C';
-                let updated = keyTranspose.checked ? transposeTuneNotes(source, info.key, nextKey) : source;
+                const octaveShift = Number(octaveSelect.value) || 0;
+                let updated = source;
+                if (keyTranspose.checked) updated = transposeTuneNotes(source, info.key, nextKey, octaveShift);
+                else if (octaveShift !== 0) updated = transposeTuneNotes(source, info.key, info.key, octaveShift);
                 updated = setHeaderKey(updated, nextKey);
                 if (updated !== source) {
                     const caretStart = editor.selectionStart, caretEnd = editor.selectionEnd;
@@ -803,15 +892,20 @@ function initializeMusicNotes(editorElement, host) {
             });
             playPauseButton.addEventListener('click', () => playbackState === 'playing' ? pause() : play());
             host.querySelector('#stop').addEventListener('click', stop);
+            loopButton.addEventListener('click', () => {
+                loopPlayback = !loopPlayback;
+                saveSetting('loopPlayback', loopPlayback);
+                loopButton.classList.toggle('active', loopPlayback);
+                loopButton.setAttribute('aria-pressed', String(loopPlayback));
+            });
             metronomeButton.addEventListener('click', () => {
                 metronomeEnabled = !metronomeEnabled;
                 saveSetting('metronome', metronomeEnabled);
                 metronomeButton.classList.toggle('active', metronomeEnabled);
                 metronomeButton.setAttribute('aria-pressed', String(metronomeEnabled));
-                clearTimers(metronomeTimers);
+                clearMetronome();
                 if (playbackState === 'playing' && metronomeEnabled) {
-                    const position = (performance.now() - playbackStartedAt) * playbackRate;
-                    scheduleMetronome(position, playbackRun, playbackRate);
+                    scheduleMetronome(currentPlaybackPosition(), audioContext.currentTime + 0.12, playbackRate);
                 }
             });
             const recordButton = host.querySelector('#record');
@@ -862,26 +956,24 @@ function initializeMusicNotes(editorElement, host) {
             speed.addEventListener('input', () => {
                 host.querySelector('#speed-value').value = `${Number(speed.value).toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}×`;
                 if (playbackState === 'playing') {
-                    const position = (performance.now() - playbackStartedAt) * playbackRate;
-                    startFrom(position);
+                    startFrom(currentPlaybackPosition());
                 }
             });
             beatFrequency.addEventListener('input', () => {
                 updateMetronomeBeat();
                 if (playbackState === 'playing' && metronomeEnabled) {
-                    const position = (performance.now() - playbackStartedAt) * playbackRate;
-                    scheduleMetronome(position, playbackRun, playbackRate);
+                    scheduleMetronome(currentPlaybackPosition(), audioContext.currentTime + 0.12, playbackRate);
                 }
             });
             editor.addEventListener('input', () => {
                 refreshTuneKey();
-                playbackRun++; clearTimers(playbackTimers); clearTimers(metronomeTimers); stopPlaybackVoices(); stopPreview();
+                playbackRun++; clearTimers(playbackTimers); clearMetronome(); stopPlaybackVoices(); stopPreview();
                 playbackState = 'stopped'; updatePlaybackControl(); playbackElapsed = 0;
                 preparedText = ''; events = [];
             });
 
             function resetForEditorChange() {
-                playbackRun++; clearTimers(playbackTimers); clearTimers(metronomeTimers); stopPlaybackVoices(); stopPreview();
+                playbackRun++; clearTimers(playbackTimers); clearMetronome(); stopPlaybackVoices(); stopPreview();
                 for (const state of pointerStates.values()) if (state.recordTimer) clearInterval(state.recordTimer);
                 pointerStates.clear(); stopAllNotes(); roll.classList.remove('panning');
                 playbackState = 'stopped'; updatePlaybackControl(); playbackElapsed = 0;

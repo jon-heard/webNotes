@@ -1256,7 +1256,7 @@ if ($notesParam === null) {
     <div id="main">
         <div id="tabs">
             <button id="tab-add" title="New Tab">+</button>
-            <span id="main-revision" aria-label="Main app revision 2">R.2</span>
+            <span id="main-revision" aria-label="Main app revision 3">R.3</span>
         </div>
         <div id="editor-container">
             <textarea id="editor" spellcheck="false" autocorrect="off" autocapitalize="off"></textarea>
@@ -2189,7 +2189,11 @@ if ($notesParam === null) {
                 musicNotesLoading = (async () => {
                     if (!window.ABCJS) await loadMusicScript(new URL('abc.min.js', musicBase));
                     if (!window.fflate?.unzipSync) await loadMusicScript(new URL('fflate.min.js', musicBase));
-                    if (!window.MusicNotes?.mount) await loadMusicScript(new URL('musicNotes.js', musicBase));
+                    if (!window.MusicNotes?.mount) {
+                        const musicNotesUrl = new URL('musicNotes.js', musicBase);
+                        musicNotesUrl.searchParams.set('v', String(Date.now()));
+                        await loadMusicScript(musicNotesUrl);
+                    }
                     const controller = window.MusicNotes.mount(document.getElementById('editor'), document.getElementById('music-editor-host'));
                     await controller.loadSamples();
                     musicNotesController = controller;
