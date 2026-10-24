@@ -53,7 +53,6 @@ window.MusicNotes.mount = function(editorElement, host) {
                     <option value="1/4">1/4 (1)</option><option value="1/3">1/3 (2)</option><option value="1/2">1/2 (3)</option><option value="3/4">3/4 (4)</option><option value="1" selected>1 (5)</option>
                     <option value="3/2">3/2 (6)</option><option value="2">2 (7)</option><option value="3">3 (8)</option><option value="4">4 (9)</option>
                 </select>
-                <button id="undo-record" type="button" title="Undo the last recorded note" aria-label="Undo the last recorded note" disabled>↶</button>
             </div>
             <div class="music-notes-cluster">
                 <button id="play-pause" type="button" title="Play" aria-label="Play">▷</button>
@@ -72,9 +71,9 @@ window.MusicNotes.mount = function(editorElement, host) {
                 <button type="button" data-record-text=" | " title="Insert a bar line">|</button>
                 <button type="button" data-record-text=" |: " title="Insert repeat start">|:</button>
                 <button type="button" data-record-text=" :| " title="Insert repeat end">:|</button>
-                <button type="button" data-record-text="\n" title="Insert newline">\\n</button>
+                <button type="button" data-record-newline="true" title="Insert newline">\\n</button>
             </div>
-            <div class="music-notes-cluster music-notes-revision" aria-label="Revision 7">R.7</div>
+            <div class="music-notes-cluster music-notes-revision" aria-label="Revision 9">R.9</div>
         </div>
         <div class="music-notes-roll-frame"><div id="roll" class="music-notes-roll" aria-label="Piano keyboard" tabindex="0"><div id="keys" class="music-notes-keys"></div></div></div>
     </section>`;
@@ -105,7 +104,6 @@ function initializeMusicNotes(editorElement, host) {
             let sampleArchivePromise = null;
             let events = [], preparedText = '', totalMs = 0, metronomeBeatMs = 500, abcQpm = 120, abcUnitLength = 1 / 8, playbackState = 'stopped', playbackElapsed = 0, playbackStartedAt = 0, playbackRate = 1, playbackRun = 0, recording = false, metronomeEnabled = false, historyMutation = false;
             let playbackTimers = new Set(), metronomeTimers = new Set(), playbackVoices = new Set(), previewVoices = new Set(), previewTimers = new Set();
-            const recordedEdits = [];
             const recordedAccidentals = new Map();
             let lastPointerNote = null;
 
@@ -418,43 +416,35 @@ function initializeMusicNotes(editorElement, host) {
                 let note = octave >= 5 ? letter.toLowerCase() + "'".repeat(octave - 5) : letter + ','.repeat(Math.max(0, 4 - octave));
                 return { text: prefix + note, key, previousAccidental, accidental };
             }
+            function applyEditorText(token, start, replaced, direction, spelling = null) {
+                const removeLength = direction === 'undo' ? token.length : replaced.length;
+                const insertText = direction === 'undo' ? replaced : token;
+                historyMutation = true;
+                editor.setRangeText(insertText, start, start + removeLength, 'end');
+                editor.dispatchEvent(new Event('input', { bubbles: true }));
+                historyMutation = false;
+                if (spelling?.key) {
+                    if (direction === 'undo') {
+                        if (spelling.previousAccidental === null) recordedAccidentals.delete(spelling.key);
+                        else recordedAccidentals.set(spelling.key, spelling.previousAccidental);
+                    } else recordedAccidentals.set(spelling.key, spelling.accidental);
+                }
+            }
             function insertRecordedText(token, spelling = null) {
                 if (!recording) return;
                 const start = editor.selectionStart, end = editor.selectionEnd;
-                const delta = token.length - (end - start);
-                for (const edit of recordedEdits) {
-                    const editEnd = edit.start + edit.text.length;
-                    if (end <= edit.start) edit.start += delta;
-                    else if (start < editEnd && end > edit.start) recordedEdits.length = 0;
-                }
-                recordedEdits.push({ start, text: token, replaced: editor.value.slice(start, end), accidentalKey: spelling?.key, previousAccidental: spelling?.previousAccidental, accidental: spelling?.accidental });
-                editor.setRangeText(token, start, end, 'end');
-                host.querySelector('#undo-record').disabled = false;
-                historyMutation = true;
-                editor.dispatchEvent(new Event('input', { bubbles: true }));
-                historyMutation = false;
+                const replaced = editor.value.slice(start, end);
+                const action = {
+                    undo: () => applyEditorText(token, start, replaced, 'undo', spelling),
+                    redo: () => applyEditorText(token, start, replaced, 'redo', spelling)
+                };
+                if (typeof window.applyEditorHistoryAction === 'function') window.applyEditorHistoryAction(action);
+                else action.redo();
             }
             function insertRecordedNote(state) {
                 if (!recording || state.midi === null) return;
                 const spelling = noteToken(state.midi);
                 insertRecordedText(spelling.text + (state.recordLength === '1' ? '' : state.recordLength), spelling);
-            }
-            function undoRecordedNote() {
-                const edit = recordedEdits.pop();
-                if (!edit) return;
-                if (editor.value.slice(edit.start, edit.start + edit.text.length) === edit.text) {
-                    editor.setRangeText(edit.replaced, edit.start, edit.start + edit.text.length, 'end');
-                    if (edit.accidentalKey) {
-                        if (edit.previousAccidental === null) recordedAccidentals.delete(edit.accidentalKey);
-                        else recordedAccidentals.set(edit.accidentalKey, edit.previousAccidental);
-                    }
-                    const delta = edit.replaced.length - edit.text.length;
-                    for (const earlier of recordedEdits) if (edit.start + edit.text.length <= earlier.start) earlier.start += delta;
-                    historyMutation = true;
-                    editor.dispatchEvent(new Event('input', { bubbles: true }));
-                    historyMutation = false;
-                }
-                host.querySelector('#undo-record').disabled = recordedEdits.length === 0;
             }
             function startRecordedKey(state) {
                 if (!recording || state.midi === null) return;
@@ -555,7 +545,7 @@ function initializeMusicNotes(editorElement, host) {
             });
             roll.addEventListener('pointermove', event => {
                 const state = pointerStates.get(event.pointerId); if (!state) return;
-                const previousX = state.lastX;
+                const previousX = state.lastX, previousY = state.lastY;
                 state.lastX = event.clientX; state.lastY = event.clientY;
                 if (pinchState?.ids.includes(event.pointerId)) {
                     const [first, second] = pinchState.ids.map(id => pointerStates.get(id));
@@ -571,6 +561,10 @@ function initializeMusicNotes(editorElement, host) {
                 const rect = roll.getBoundingClientRect(), y = event.clientY - rect.top, key = keyAtPoint(event.clientX, event.clientY);
                 const isPanBand = y <= whiteWidth;
                 if (state.mode === 'pan') {
+                    if (event.pointerType === 'mouse' && Math.abs(event.clientY - previousY) > 2) {
+                        const rect = roll.getBoundingClientRect();
+                        resizeKeyboard(whiteWidth * Math.exp(-(event.clientY - previousY) * 0.0015), event.clientX - rect.left);
+                    }
                     roll.scrollLeft += previousX - event.clientX; event.preventDefault(); return;
                 }
                 if (isPanBand) {
@@ -622,18 +616,33 @@ function initializeMusicNotes(editorElement, host) {
             }
             recordButton.addEventListener('click', toggleRecording);
             host.querySelectorAll('[data-record-text]').forEach(button => button.addEventListener('click', () => insertRecordedText(button.dataset.recordText)));
-            host.querySelector('#undo-record').addEventListener('click', undoRecordedNote);
+            host.querySelectorAll('[data-record-newline]').forEach(button => button.addEventListener('click', () => insertRecordedText('\n')));
             document.addEventListener('keydown', event => {
                 if (host.hidden) return;
+                if (event.ctrlKey && !event.altKey && !event.metaKey && event.key.toLowerCase() === 'z') {
+                    const handled = event.shiftKey
+                        ? window.redoEditorHistoryAction?.()
+                        : window.undoEditorHistoryAction?.();
+                    if (handled) event.preventDefault();
+                    return;
+                }
                 if (event.ctrlKey && event.altKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'r') {
                     event.preventDefault(); toggleRecording(); return;
                 }
                 const lengthHotkeys = { '1': '1/4', '2': '1/3', '3': '1/2', '4': '3/4', '5': '1', '6': '3/2', '7': '2', '8': '3', '9': '4' };
+                if (recording && !event.ctrlKey && !event.metaKey && !event.altKey) {
+                    if (event.key === ' ' && event.shiftKey) {
+                        event.preventDefault(); insertRecordedText(' | '); return;
+                    }
+                    if (event.key === ' ' && !event.shiftKey) {
+                        event.preventDefault(); insertRecordedText(' '); return;
+                    }
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault(); insertRecordedText('\n'); return;
+                    }
+                }
                 if (recording && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && lengthHotkeys[event.key]) {
                     event.preventDefault(); noteLength.value = lengthHotkeys[event.key]; return;
-                }
-                if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'z' && recordedEdits.length) {
-                    event.preventDefault(); undoRecordedNote();
                 }
             });
             volume.addEventListener('input', () => saveSetting('volume', volume.value));
@@ -658,9 +667,7 @@ function initializeMusicNotes(editorElement, host) {
             });
             editor.addEventListener('input', () => {
                 if (!historyMutation) {
-                    recordedEdits.length = 0;
                     recordedAccidentals.clear();
-                    host.querySelector('#undo-record').disabled = true;
                 }
                 playbackRun++; clearTimers(playbackTimers); clearTimers(metronomeTimers); stopPlaybackVoices(); stopPreview();
                 playbackState = 'stopped'; updatePlaybackControl(); playbackElapsed = 0;
@@ -673,8 +680,7 @@ function initializeMusicNotes(editorElement, host) {
                 pointerStates.clear(); stopAllNotes(); roll.classList.remove('panning');
                 playbackState = 'stopped'; updatePlaybackControl(); playbackElapsed = 0;
                 preparedText = ''; events = [];
-                recordedEdits.length = 0; recordedAccidentals.clear();
-                host.querySelector('#undo-record').disabled = true;
+                recordedAccidentals.clear();
             }
 
             window.MusicNotepadPiano = Object.freeze({

@@ -808,6 +808,24 @@ if ($notesParam === null) {
             flex-shrink: 0;
         }
 
+        #sidebar #editor-buttons { display: none; }
+        #status-bar {
+            min-height: 46px;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        #status-position { flex: 1; font-size: 20px; line-height: 1; }
+        #status-bar #editor-buttons {
+            display: flex;
+            flex: none;
+            border: 0;
+            padding: 0;
+            gap: 6px;
+        }
+        #status-bar #editor-buttons button { flex: none; min-width: 40px; height: 34px; padding: 3px 10px; }
+
         #sidebar-buttons button,
         #editor-buttons button {
             flex: 1;
@@ -854,6 +872,22 @@ if ($notesParam === null) {
             overflow-y: hidden;
             flex-shrink: 0;
         }
+
+        #main-revision {
+            position: sticky;
+            right: 0;
+            z-index: 1;
+            flex: none;
+            align-self: stretch;
+            display: flex;
+            align-items: center;
+            margin-left: auto;
+            padding: 0 10px;
+            background: #e8e8e8;
+            color: #777;
+            font: 11px ui-monospace, monospace;
+        }
+        body.night-mode #main-revision { background: #252525; color: #999; }
 
         .tab {
             display: flex;
@@ -955,6 +989,8 @@ if ($notesParam === null) {
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
         }
+        #editor.wrap-extend { white-space: pre; overflow-x: auto; overflow-wrap: normal; }
+        #editor.wrap-soft { white-space: pre-wrap; overflow-wrap: anywhere; }
 
         #editor::selection {
             background: #FFB830;
@@ -1122,6 +1158,29 @@ if ($notesParam === null) {
             background: #f0f0f0;
         }
 
+        .context-parent { position: relative; padding: 8px 15px; cursor: pointer; }
+        .context-parent:hover { background: #f0f0f0; }
+        .context-arrow { float: right; margin-left: 24px; }
+        .context-submenu {
+            display: none;
+            position: absolute;
+            top: -1px;
+            left: 100%;
+            min-width: 145px;
+            padding: 3px 0;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,.2);
+        }
+        .context-parent:hover .context-submenu,
+        .context-parent.open .context-submenu { display: block; }
+        .context-item.disabled { opacity: .45; cursor: default; pointer-events: none; }
+        #context-menu.submenu-left .context-submenu { left: auto; right: 100%; }
+        body.night-mode .context-parent:hover { background: #3a3a3a; }
+        body.night-mode .context-submenu { background: #2a2a2a; border-color: #505050; color: #eee; }
+        body.night-mode .context-item:hover { background: #3a3a3a; }
+
         .context-separator {
             height: 1px;
             background: #ddd;
@@ -1185,22 +1244,18 @@ if ($notesParam === null) {
 <body>
     <div id="sidebar">
         <div id="hierarchy"></div>
-        <div id="editor-buttons">
-            <button id="btn-undo" title="Undo">↶</button>
-            <button id="btn-redo" title="Redo">↷</button>
-            <button id="btn-insert-tab" title="Insert tab character">⇥</button>
-        </div>
         <div id="sidebar-buttons">
             <button id="btn-save" title="Save">&#128190;</button>
             <button id="btn-find" title="Find">&#128269;</button>
             <button id="btn-new" title="New Note">&#10133;</button>
-            <button id="btn-back" title="Back to Notes List">🠈</button>
+            <button id="btn-back" title="Back to Notes List">👈</button>
         </div>
     </div>
     <div id="sidebar-resizer"></div>
     <div id="main">
         <div id="tabs">
             <button id="tab-add" title="New Tab">+</button>
+            <span id="main-revision" aria-label="Main app revision 1">R.1</span>
         </div>
         <div id="editor-container">
             <textarea id="editor" spellcheck="false" autocorrect="off" autocapitalize="off"></textarea>
@@ -1224,7 +1279,14 @@ if ($notesParam === null) {
                 <button id="replace-all" title="Replace All">Replace All</button>
             </div>
         </div>
-        <div id="status-bar">Ln 1, Col 1</div>
+        <div id="status-bar">
+            <span id="status-position">Ln 1, Col 1</span>
+            <div id="editor-buttons">
+                <button id="btn-undo" title="Undo">↶</button>
+                <button id="btn-redo" title="Redo">↷</button>
+                <button id="btn-insert-tab" title="Insert tab character">\t</button>
+            </div>
+        </div>
     </div>
 
     <div id="context-menu">
@@ -1238,6 +1300,15 @@ if ($notesParam === null) {
         <div class="context-item" data-action="copy-path">Copy path</div>
         <div class="context-separator"></div>
         <div class="context-item" data-action="tree-merged-copy">Create tree-merged copy</div>
+        <div class="context-separator"></div>
+        <div class="context-parent" id="wrap-type-parent">Wrap type <span class="context-arrow">›</span>
+            <div class="context-submenu">
+                <div class="context-item" data-action="wrap-inherit">inherit</div>
+                <div class="context-item" data-action="wrap-wrap">wrap</div>
+                <div class="context-item" data-action="wrap-extend">extend</div>
+            </div>
+        </div>
+        <div class="context-item" data-action="set-prefix">Set prefix</div>
         <div class="context-item" data-action="properties">Properties</div>
     </div>
     <div id="tab-context-menu">
@@ -1258,7 +1329,7 @@ if ($notesParam === null) {
 
     <script>
         // State
-        let notesData = { name: 'root', text: '', children: [] };
+        let notesData = { name: 'root', text: '', prefix: '', wrap: 'wrap', isClosed: false, children: [] };
         let tabs = [];
         let tabStates = []; // Stores {scrollTop, selectionStart, selectionEnd} for each tab
         let musicEditorOpenByTab = [];
@@ -1271,7 +1342,44 @@ if ($notesParam === null) {
         let editRevision = 0;
         let savePromise = null;
         let contextMenuTarget = null;
-        let collapsedPaths = new Set();
+        let registeredUndoActions = [];
+        let registeredRedoActions = [];
+        let applyingRegisteredHistory = false;
+
+        function clearRegisteredEditorHistory() {
+            registeredUndoActions.length = 0;
+            registeredRedoActions.length = 0;
+        }
+
+        function runRegisteredEditorAction(action, direction) {
+            applyingRegisteredHistory = true;
+            try { action[direction](); }
+            finally { applyingRegisteredHistory = false; }
+        }
+
+        window.applyEditorHistoryAction = function(action) {
+            if (!action || typeof action.undo !== 'function' || typeof action.redo !== 'function') return false;
+            runRegisteredEditorAction(action, 'redo');
+            registeredUndoActions.push(action);
+            registeredRedoActions.length = 0;
+            return true;
+        };
+
+        window.undoEditorHistoryAction = function() {
+            if (!registeredUndoActions.length) return false;
+            const action = registeredUndoActions.pop();
+            runRegisteredEditorAction(action, 'undo');
+            registeredRedoActions.push(action);
+            return true;
+        };
+
+        window.redoEditorHistoryAction = function() {
+            if (!registeredRedoActions.length) return false;
+            const action = registeredRedoActions.pop();
+            runRegisteredEditorAction(action, 'redo');
+            registeredUndoActions.push(action);
+            return true;
+        };
 
         // Touch drag state
         let touchDragPath = null;
@@ -1409,6 +1517,9 @@ if ($notesParam === null) {
             return {
                 name: note.name,
                 text: note.text,
+                prefix: note.prefix,
+                wrap: note.wrap,
+                isClosed: note.isClosed,
                 children: note.children.map(c => cloneNote(c))
             };
         }
@@ -1433,6 +1544,10 @@ if ($notesParam === null) {
         function cleanNoteForSave(note) {
             const cleaned = { name: note.name };
 
+            if (note.prefix !== '~') cleaned.prefix = note.prefix ?? '';
+            if ((note.wrap ?? 'inherit') !== 'inherit') cleaned.wrap = note.wrap;
+            if (note.isClosed === true) cleaned.isClosed = true;
+
             // Only include text if non-empty after trimming
             if (note.text && note.text.trim() !== '') {
                 cleaned.text = note.text;
@@ -1448,14 +1563,51 @@ if ($notesParam === null) {
         }
 
         // Normalize note data after loading - ensure text and children properties exist
-        function normalizeNote(note) {
+        function normalizeNote(note, isRoot = false) {
             if (typeof note.text !== 'string') {
                 note.text = '';
             }
+            if (typeof note.prefix !== 'string') note.prefix = isRoot ? '' : '~';
+            if (isRoot) note.wrap = note.wrap === 'extend' ? 'extend' : 'wrap';
+            else if (!['inherit', 'wrap', 'extend'].includes(note.wrap)) note.wrap = 'inherit';
+            note.isClosed = note.isClosed === true;
             if (!Array.isArray(note.children)) {
                 note.children = [];
             }
-            note.children.forEach(child => normalizeNote(child));
+            note.children.forEach(child => normalizeNote(child, false));
+        }
+
+        function makeNote(name, text = '') {
+            return { name, text, prefix: '~', wrap: 'inherit', isClosed: false, children: [] };
+        }
+
+        function getEffectivePrefix(path) {
+            let note = notesData;
+            let prefix = typeof note.prefix === 'string' ? note.prefix : '';
+            for (const segment of path.slice(1)) {
+                note = note.children.find(child => namesEqual(child.name, segment));
+                if (!note) break;
+                if (typeof note.prefix === 'string' && note.prefix !== '~') prefix = note.prefix;
+            }
+            return prefix;
+        }
+
+        function getEffectiveWrap(path) {
+            let note = notesData;
+            let wrap = note.wrap === 'extend' ? 'extend' : 'wrap';
+            for (const segment of path.slice(1)) {
+                note = note.children.find(child => namesEqual(child.name, segment));
+                if (!note) break;
+                if (note.wrap !== 'inherit') wrap = note.wrap;
+            }
+            return wrap;
+        }
+
+        function updateEditorWrap() {
+            const path = tabs[activeTabIndex] || getRootPath();
+            const editor = document.getElementById('editor');
+            editor.classList.toggle('wrap-extend', getEffectiveWrap(path) === 'extend');
+            editor.classList.toggle('wrap-soft', getEffectiveWrap(path) === 'wrap');
         }
 
         // Save notes to file
@@ -1514,7 +1666,7 @@ if ($notesParam === null) {
                 const response = await fetch(`?action=loadfile&filename=${encodeURIComponent(getNotesFilename())}`);
                 if (response.ok) {
                     notesData = await response.json();
-                    normalizeNote(notesData);
+                    normalizeNote(notesData, true);
                     if (tabs.length === 0) {
                         addTab(getRootPath());
                     } else {
@@ -1530,18 +1682,15 @@ if ($notesParam === null) {
 
         // Toggle collapsed state
         function toggleCollapsed(path) {
-            const key = JSON.stringify(path);
-            if (collapsedPaths.has(key)) {
-                collapsedPaths.delete(key);
-            } else {
-                collapsedPaths.add(key);
-            }
+            const note = getNoteByPath(path);
+            if (!note) return;
+            note.isClosed = !note.isClosed;
             renderHierarchy();
         }
 
         // Check if path is collapsed
         function isCollapsed(path) {
-            return collapsedPaths.has(JSON.stringify(path));
+            return getNoteByPath(path)?.isClosed === true;
         }
 
         // Create a drop zone element
@@ -1620,7 +1769,7 @@ if ($notesParam === null) {
                 // Note name
                 const nameSpan = document.createElement('span');
                 nameSpan.className = 'note-name';
-                nameSpan.textContent = note.name;
+                nameSpan.textContent = getEffectivePrefix(path) + note.name;
 
                 // Track last tap time for double-tap detection
                 let lastTapTime = 0;
@@ -1959,7 +2108,7 @@ if ($notesParam === null) {
 
                 const nameSpan = document.createElement('span');
                 nameSpan.className = 'tab-name';
-                nameSpan.textContent = note ? note.name : path[path.length - 1];
+                nameSpan.textContent = note ? getEffectivePrefix(path) + note.name : path[path.length - 1];
                 tab.appendChild(nameSpan);
 
                 const closeBtn = document.createElement('button');
@@ -2208,8 +2357,10 @@ if ($notesParam === null) {
         // Update editor content
         function updateEditor() {
             const editor = document.getElementById('editor');
+            clearRegisteredEditorHistory();
             if (tabs.length === 0 || activeTabIndex >= tabs.length) {
                 editor.value = '';
+                updateEditorWrap();
                 updateLinkHighlights();
                 updateStatusBar();
                 syncMusicEditor();
@@ -2218,6 +2369,7 @@ if ($notesParam === null) {
 
             const note = getNoteByPath(tabs[activeTabIndex]);
             editor.value = note ? note.text : '';
+            updateEditorWrap();
             restoreTabState();
             updateLinkHighlights();
             firstFindMatchIsDirty = true; // Note changed, re-evaluate first match
@@ -2328,6 +2480,14 @@ if ($notesParam === null) {
         function showContextMenu(x, y, path) {
             contextMenuTarget = path;
             const menu = document.getElementById('context-menu');
+            const note = getNoteByPath(path);
+            menu.querySelectorAll('[data-action^="wrap-"]').forEach(item => {
+                const value = item.dataset.action.slice(5);
+                item.textContent = `${note?.wrap === value ? '✓ ' : ''}${value}`;
+                item.classList.toggle('disabled', path.length === 1 && value === 'inherit');
+            });
+            menu.querySelector('#wrap-type-parent').classList.remove('open');
+            menu.classList.remove('submenu-left');
             menu.style.left = x + 'px';
             menu.style.top = y + 'px';
             menu.style.display = 'block';
@@ -2339,6 +2499,7 @@ if ($notesParam === null) {
             if (rect.bottom > window.innerHeight) {
                 menu.style.top = (window.innerHeight - rect.height - 5) + 'px';
             }
+            if (rect.right + 155 > window.innerWidth) menu.classList.add('submenu-left');
         }
 
         // Hide context menu
@@ -2378,7 +2539,7 @@ if ($notesParam === null) {
                 return;
             }
 
-            parent.children.push({ name, text: '', children: [] });
+            parent.children.push(makeNote(name));
             markDirty();
             renderHierarchy();
         }
@@ -2425,18 +2586,6 @@ if ($notesParam === null) {
                 }
                 return newTabPath;
             });
-
-            if (path.length === 1) {
-                const newCollapsed = new Set();
-                for (const key of collapsedPaths) {
-                    const p = JSON.parse(key);
-                    if (namesEqual(p[0], oldName)) {
-                        p[0] = newName;
-                    }
-                    newCollapsed.add(JSON.stringify(p));
-                }
-                collapsedPaths = newCollapsed;
-            }
 
             markDirty();
             renderHierarchy();
@@ -2573,7 +2722,7 @@ if ($notesParam === null) {
 
                 if (confirm(`Note "${newName}" not found. Create it?`)) {
                     if (!notesData.children.some(c => namesEqual(c.name, newName))) {
-                        notesData.children.push({ name: newName, text: '', children: [] });
+                        notesData.children.push(makeNote(newName));
                         markDirty();
                         renderHierarchy();
                     }
@@ -2624,7 +2773,7 @@ if ($notesParam === null) {
 
                 if (confirm(`Note "${newName}" not found. Create it?`)) {
                     if (!notesData.children.some(c => namesEqual(c.name, newName))) {
-                        notesData.children.push({ name: newName, text: '', children: [] });
+                        notesData.children.push(makeNote(newName));
                         markDirty();
                         renderHierarchy();
                     }
@@ -2684,7 +2833,7 @@ if ($notesParam === null) {
             }
 
             // Create new note with combined content (no children)
-            parent.children.push({ name: newName, text: combinedContent, children: [] });
+            parent.children.push(makeNote(newName, combinedContent));
 
             markDirty();
             renderHierarchy();
@@ -2749,7 +2898,7 @@ if ($notesParam === null) {
             const line = lines.length;
             const col = lines[lines.length - 1].length + 1;
 
-            document.getElementById('status-bar').textContent = `Ln ${line}, Col ${col}`;
+            document.getElementById('status-position').textContent = `Ln ${line}, Col ${col}`;
         }
 
         // Find functionality state
@@ -3308,6 +3457,7 @@ if ($notesParam === null) {
             }
 
             editor.addEventListener('input', () => {
+                if (!applyingRegisteredHistory) clearRegisteredEditorHistory();
                 if (tabs.length === 0 || activeTabIndex >= tabs.length) return;
                 const note = getNoteByPath(tabs[activeTabIndex]);
                 if (note) {
@@ -3423,11 +3573,11 @@ if ($notesParam === null) {
 
             document.getElementById('btn-undo').addEventListener('click', () => {
                 editor.focus();
-                document.execCommand('undo');
+                if (!window.undoEditorHistoryAction()) document.execCommand('undo');
             });
             document.getElementById('btn-redo').addEventListener('click', () => {
                 editor.focus();
-                document.execCommand('redo');
+                if (!window.redoEditorHistoryAction()) document.execCommand('redo');
             });
             document.getElementById('btn-insert-tab').addEventListener('click', () => {
                 editor.focus();
@@ -3571,6 +3721,11 @@ if ($notesParam === null) {
             });
 
             document.getElementById('context-menu').addEventListener('click', (e) => {
+                const parentMenu = e.target.closest('.context-parent');
+                if (parentMenu && !e.target.closest('[data-action]')) {
+                    parentMenu.classList.toggle('open');
+                    return;
+                }
                 const menuItem = e.target.closest('[data-action]');
                 if (!menuItem || !contextMenuTarget) return;
 
@@ -3604,6 +3759,31 @@ if ($notesParam === null) {
                     case 'tree-merged-copy':
                         createTreeMergedCopy(targetPath);
                         break;
+                    case 'wrap-inherit':
+                    case 'wrap-wrap':
+                    case 'wrap-extend': {
+                        const targetNote = getNoteByPath(targetPath);
+                        const wrapValue = action.slice(5);
+                        if (targetNote && !(targetPath.length === 1 && wrapValue === 'inherit')) {
+                            targetNote.wrap = wrapValue;
+                            markDirty();
+                            updateEditorWrap();
+                        }
+                        break;
+                    }
+                    case 'set-prefix': {
+                        const targetNote = getNoteByPath(targetPath);
+                        if (targetNote) {
+                            const prefix = prompt('Enter prefix (~ means inherit):', targetNote.prefix ?? (targetPath.length === 1 ? '' : '~'));
+                            if (prefix !== null && prefix !== targetNote.prefix) {
+                                targetNote.prefix = prefix;
+                                markDirty();
+                                renderHierarchy();
+                                renderTabs();
+                            }
+                        }
+                        break;
+                    }
                     case 'properties':
                         showProperties(targetPath);
                         break;
