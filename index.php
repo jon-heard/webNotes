@@ -1203,7 +1203,7 @@ if ($notesParam === null) {
             <button id="tab-add" title="New Tab">+</button>
         </div>
         <div id="editor-container">
-            <textarea id="editor"></textarea>
+            <textarea id="editor" spellcheck="false" autocorrect="off" autocapitalize="off"></textarea>
             <div id="link-overlay"></div>
             <div id="music-editor-host" hidden></div>
         </div>
@@ -1426,7 +1426,7 @@ if ($notesParam === null) {
             document.getElementById('btn-save').classList.remove('save-error');
             updateDirtyIndicator();
             if (saveTimer) clearTimeout(saveTimer);
-            saveTimer = setTimeout(saveNotes, 30000);
+            saveTimer = setTimeout(saveNotes, 60000);
         }
 
         // Clean note data for saving - remove empty text and empty children arrays
@@ -1502,7 +1502,7 @@ if ($notesParam === null) {
                     saveBtn.classList.remove('saving');
                     savePromise = null;
                     updateDirtyIndicator();
-                    if (isDirty && !saveTimer) saveTimer = setTimeout(saveNotes, 30000);
+                    if (isDirty && !saveTimer) saveTimer = setTimeout(saveNotes, 60000);
                 }
             })();
             return savePromise;

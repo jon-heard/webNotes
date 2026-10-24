@@ -7,7 +7,7 @@ window.MusicNotes.mount = function(editorElement, host) {
         const style = document.createElement('style');
         style.id = 'music-notes-style';
         style.textContent = `
-            :root { --white-key: 48px; --black-key: 30px; --dock-height: 164px; }
+            :root { --white-key: 48px; --black-key: 30px; --dock-height: 188px; }
             .music-notes-dock { position: relative; z-index: 2; flex: none; background: #252629; border-top: 1px solid #444; color: #eee; font: 14px system-ui, sans-serif; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
             .music-notes-transport { min-height: 40px; display: flex; align-items: center; flex-wrap: wrap; gap: 5px 10px; padding: 4px 8px; }
             .music-notes-cluster { display: flex; flex: none; align-items: center; gap: 5px; white-space: nowrap; }
@@ -19,18 +19,22 @@ window.MusicNotes.mount = function(editorElement, host) {
             .music-notes-slider input { flex: none; width: 76px; accent-color: #e4c64c; }
             .music-notes-slider output { min-width: 28px; color: #aaa; font: 10px ui-monospace, monospace; }
             .music-notes-transport button.active { background: #8a2929; border-color: #d66; color: white; }
+            .music-notes-transport #record.active { background: #e4c64c; border-color: #fff09a; color: #302700; }
+            .music-notes-inserts button { background: #183c68; border-color: #376ca7; color: #fff; }
+            .music-notes-inserts button:hover { background: #245184; }
+            .music-notes-inserts[hidden] { display: none; }
             .music-notes-revision { color: #aaa; font: 11px ui-monospace, monospace; padding: 0 4px; }
             .music-notes-transport .duration.flash { animation: music-notes-duration-flash .18s ease-in-out 2 alternate; }
             @keyframes music-notes-duration-flash { to { background: #f1d34a; color: #332900; border-color: #ffe985; } }
-            .music-notes-roll-frame { position: relative; height: calc(var(--dock-height) - 44px); }
+            .music-notes-roll-frame { position: relative; height: calc(var(--white-key) * 3); }
             .music-notes-roll { height: 100%; overflow: hidden; cursor: crosshair; touch-action: none; overscroll-behavior: contain; }
             .music-notes-roll.panning { cursor: grabbing; }
             .music-notes-keys { position: relative; height: 100%; }
             .music-notes-key { position: absolute; top: 0; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 7px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
-            .music-notes-white-key { z-index: 1; width: var(--white-key); height: 100%; border: 0; border-right: 1px solid #888; border-bottom: 1px solid #888; box-shadow: inset 0 1px #888; border-radius: 0 0 3px 3px; background: linear-gradient(to bottom, #c8c8c8 0 22%, #eee 22% 100%); color: #555; }
+            .music-notes-white-key { z-index: 1; width: var(--white-key); height: 100%; border: 0; border-right: 1px solid #888; border-bottom: 1px solid #888; box-shadow: inset 0 1px #888; border-radius: 0 0 3px 3px; background: linear-gradient(to bottom, #c8c8c8 0 33.333%, #eee 33.333% 100%); color: #555; }
             .music-notes-keys > .music-notes-white-key:first-child { border-left: 1px solid #888; }
-            .music-notes-black-key { z-index: 2; width: var(--black-key); height: 66%; border: 1px solid #111; border-radius: 0 0 3px 3px; background: #17181a; color: #ddd; }
-            .music-notes-key-label { pointer-events: none; font: 10px ui-monospace, monospace; }
+            .music-notes-black-key { z-index: 2; width: var(--black-key); height: calc(var(--white-key) * 2); border: 1px solid #111; border-radius: 0 0 3px 3px; background: #17181a; color: #ddd; }
+            .music-notes-key-label { pointer-events: none; font: 16px ui-monospace, monospace; }
             .music-notes-key.pressed { z-index: 3; background: #f1d34a; color: #332900; border-color: #ffe985; box-shadow: 0 0 10px #e4c64c; }
             body.keyboard-open-landscape .music-notes-roll-frame { display: none; }
         `;
@@ -41,7 +45,7 @@ window.MusicNotes.mount = function(editorElement, host) {
             <div class="music-notes-cluster"><button id="new-tune" type="button" title="Insert a new ABC tune header" aria-label="New tune">N</button></div>
             <div class="music-notes-cluster">
                 <label class="music-notes-slider" title="Volume">Vol <input id="volume" type="range" min="0" max="3.5" value="2" step="0.05"></label>
-                <label class="music-notes-slider" title="Release fade">Rel <input id="release" type="range" min="0" max="800" value="140" step="10"><output id="release-value">140</output></label>
+                <label class="music-notes-slider" title="Release fade">Rel <input id="release" type="range" min="0" max="3000" value="140" step="10"><output id="release-value">140</output></label>
             </div>
             <div class="music-notes-cluster">
                 <button id="record" type="button" aria-pressed="false" title="Record notes into ABC">●</button>
@@ -52,18 +56,25 @@ window.MusicNotes.mount = function(editorElement, host) {
                 <button id="undo-record" type="button" title="Undo the last recorded note" aria-label="Undo the last recorded note" disabled>↶</button>
             </div>
             <div class="music-notes-cluster">
-                <button id="play-pause" type="button" title="Play" aria-label="Play">▶</button>
+                <button id="play-pause" type="button" title="Play" aria-label="Play">▷</button>
                 <button id="stop" type="button" title="Stop" aria-label="Stop">■</button>
                 <label class="music-notes-slider" title="Playback speed">Speed <input id="speed" type="range" min="0.25" max="1.5" value="1" step="0.05"><output id="speed-value">1×</output></label>
             </div>
             <div class="music-notes-cluster">
-                <button id="metronome" type="button" aria-pressed="false" title="Toggle metronome" aria-label="Toggle metronome">⌚</button>
+                <button id="metronome" type="button" aria-pressed="false" title="Toggle metronome" aria-label="Toggle metronome">♥</button>
                 <select id="beat-frequency" aria-label="Metronome beat interval" title="Beat interval in multiples of the ABC L: unit">
                     <option value="1/4">1/4</option><option value="1/2">1/2</option><option value="3/4">3/4</option><option value="1" selected>1</option>
                     <option value="3/2">3/2</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
                 </select>
             </div>
-            <div class="music-notes-cluster music-notes-revision" aria-label="Revision 5">R.5</div>
+            <div id="recording-inserts" class="music-notes-cluster music-notes-inserts" hidden>
+                <button type="button" data-record-text=" " title="Insert a space">_</button>
+                <button type="button" data-record-text=" | " title="Insert a bar line">|</button>
+                <button type="button" data-record-text=" |: " title="Insert repeat start">|:</button>
+                <button type="button" data-record-text=" :| " title="Insert repeat end">:|</button>
+                <button type="button" data-record-text="\n" title="Insert newline">\\n</button>
+            </div>
+            <div class="music-notes-cluster music-notes-revision" aria-label="Revision 7">R.7</div>
         </div>
         <div class="music-notes-roll-frame"><div id="roll" class="music-notes-roll" aria-label="Piano keyboard" tabindex="0"><div id="keys" class="music-notes-keys"></div></div></div>
     </section>`;
@@ -84,8 +95,8 @@ function initializeMusicNotes(editorElement, host) {
             const beatFrequency = host.querySelector('#beat-frequency');
             const playPauseButton = host.querySelector('#play-pause');
             const metronomeButton = host.querySelector('#metronome');
-            const whiteWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--white-key')) || 48;
-            const blackWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--black-key')) || 30;
+            let whiteWidth = Number(readSetting('pianoWhiteKeyWidth')) || 48;
+            let blackWidth = whiteWidth * 0.625;
             const minMidi = 21, maxMidi = 108;
             const whitePitches = new Set([0, 2, 4, 5, 7, 9, 11]);
             const noteNames = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
@@ -96,6 +107,7 @@ function initializeMusicNotes(editorElement, host) {
             let playbackTimers = new Set(), metronomeTimers = new Set(), playbackVoices = new Set(), previewVoices = new Set(), previewTimers = new Set();
             const recordedEdits = [];
             const recordedAccidentals = new Map();
+            let lastPointerNote = null;
 
             function readSetting(key) { try { return window.localStorage.getItem(`musicNotepad.${key}`); } catch { return null; } }
             function saveSetting(key, value) { try { window.localStorage.setItem(`musicNotepad.${key}`, String(value)); } catch {} }
@@ -111,6 +123,8 @@ function initializeMusicNotes(editorElement, host) {
             metronomeEnabled = readSetting('metronome') === 'true';
             metronomeButton.classList.toggle('active', metronomeEnabled);
             metronomeButton.setAttribute('aria-pressed', String(metronomeEnabled));
+            document.documentElement.style.setProperty('--white-key', `${whiteWidth}px`);
+            document.documentElement.style.setProperty('--black-key', `${blackWidth}px`);
 
             function midiFromName(name) {
                 const match = /^([A-G])([#b]?)(-?\d+)$/.exec(name);
@@ -144,8 +158,9 @@ function initializeMusicNotes(editorElement, host) {
                 return sampleArchivePromise;
             }
 
-            function buildKeyboard() {
+            function buildKeyboard(restorePosition = true) {
                 const whites = document.createDocumentFragment(), blacks = document.createDocumentFragment(), positions = new Map();
+                whiteCount = 0;
                 for (let midi = minMidi; midi <= maxMidi; midi++) if (whitePitches.has(midi % 12)) {
                     const key = document.createElement('div');
                     key.className = 'music-notes-key music-notes-white-key'; key.dataset.midi = midi; key.setAttribute('role', 'button'); key.setAttribute('aria-label', noteName(midi));
@@ -161,11 +176,48 @@ function initializeMusicNotes(editorElement, host) {
                     key.style.left = `${positions.get(midi - 1) * whiteWidth + whiteWidth - blackWidth / 2}px`;
                     blacks.appendChild(key);
                 }
-                keysElement.append(whites, blacks);
+                keysElement.replaceChildren(whites, blacks);
                 keysElement.style.width = `${whiteCount * whiteWidth}px`;
                 for (const [midi, count] of keyVoiceCounts) if (count > 0) keysElement.querySelector(`[data-midi="${midi}"]`)?.classList.add('pressed');
-                requestAnimationFrame(() => { roll.scrollLeft = Math.max(0, positions.get(60) * whiteWidth - roll.clientWidth / 2); });
+                if (restorePosition) requestAnimationFrame(restorePianoRollPosition);
             }
+            function restorePianoRollPosition() {
+                if (!roll.clientWidth) return;
+                const saved = readSetting('pianoRollPosition');
+                const initialized = readSetting('pianoRollPositionInitialized') === 'true';
+                const c3 = keysElement.querySelector('[data-midi="48"]');
+                if (initialized && saved !== null && Number.isFinite(Number(saved))) {
+                    roll.scrollLeft = Math.max(0, Number(saved));
+                } else if (c3) {
+                    roll.scrollLeft = c3.offsetLeft;
+                }
+                saveSetting('pianoRollPosition', roll.scrollLeft);
+                saveSetting('pianoRollPositionInitialized', 'true');
+            }
+            function resizeKeyboard(nextWidth, preserveX = roll.clientWidth / 2) {
+                const oldWidth = whiteWidth;
+                whiteWidth = Math.max(32, Math.min(96, nextWidth));
+                blackWidth = whiteWidth * 0.625;
+                document.documentElement.style.setProperty('--white-key', `${whiteWidth}px`);
+                document.documentElement.style.setProperty('--black-key', `${blackWidth}px`);
+                const anchorRatio = (roll.scrollLeft + preserveX) / oldWidth;
+                buildKeyboard(false);
+                requestAnimationFrame(() => {
+                    roll.scrollLeft = Math.max(0, anchorRatio * whiteWidth - preserveX);
+                    saveSetting('pianoRollPosition', roll.scrollLeft);
+                    saveSetting('pianoWhiteKeyWidth', whiteWidth);
+                });
+            }
+            function resetPianoRollView() {
+                resizeKeyboard(48, roll.clientWidth / 2);
+                requestAnimationFrame(() => {
+                    const c3 = keysElement.querySelector('[data-midi="48"]');
+                    if (c3) roll.scrollLeft = c3.offsetLeft;
+                    saveSetting('pianoRollPosition', roll.scrollLeft);
+                    saveSetting('pianoRollPositionInitialized', 'true');
+                });
+            }
+            roll.addEventListener('scroll', () => saveSetting('pianoRollPosition', roll.scrollLeft), { passive: true });
 
             function setKeyGlow(midi, on) {
                 const count = Math.max(0, (keyVoiceCounts.get(midi) || 0) + (on ? 1 : -1));
@@ -243,7 +295,7 @@ function initializeMusicNotes(editorElement, host) {
             function clearTimers(timers) { for (const id of timers) clearTimeout(id); timers.clear(); }
             function updatePlaybackControl() {
                 const playing = playbackState === 'playing';
-                playPauseButton.textContent = playing ? '🐾' : '⯈';
+                playPauseButton.textContent = playing ? 'Ⅱ' : '▷';
                 playPauseButton.title = playing ? 'Pause' : 'Play';
                 playPauseButton.setAttribute('aria-label', playing ? 'Pause' : 'Play');
             }
@@ -262,12 +314,21 @@ function initializeMusicNotes(editorElement, host) {
                     if (!tune) throw new Error('No ABC tune found.');
                     const midi = tune.setUpAudio();
                     const qpm = Number(midi.tempo) || 120, msPerWhole = 240000 / qpm, grouped = new Map();
+                    const hornpipe = /^\s*R\s*:\s*hornpipe\s*$/im.test(source);
                     const lengthMatch = source.match(/^\s*L\s*:\s*(\d+)\s*\/\s*(\d+)/m);
                     abcQpm = qpm;
                     abcUnitLength = lengthMatch ? Number(lengthMatch[1]) / Number(lengthMatch[2]) : 1 / 8;
                     updateMetronomeBeat();
                     for (const track of midi.tracks || []) for (const note of track) if (note.cmd === 'note') {
-                        const startMs = note.start * msPerWhole, endMs = (note.start + note.duration) * msPerWhole;
+                        const swingTime = value => {
+                            if (!hornpipe) return value * msPerWhole;
+                            const quarterBeats = value * 4;
+                            const whole = Math.floor(quarterBeats + 1e-7), fraction = quarterBeats - whole;
+                            const beatMs = msPerWhole / 4;
+                            const swungFraction = fraction <= 0.5 ? fraction * 1.2 : 0.6 + (fraction - 0.5) * 0.8;
+                            return (whole + swungFraction) * beatMs;
+                        };
+                        const startMs = swingTime(note.start), endMs = swingTime(note.start + note.duration);
                         const key = `${note.start}:${note.startChar}:${note.endChar}`;
                         if (!grouped.has(key)) grouped.set(key, { startMs, endMs, startChar: note.startChar, endChar: note.endChar, notes: [] });
                         const event = grouped.get(key); event.endMs = Math.max(event.endMs, endMs);
@@ -357,10 +418,8 @@ function initializeMusicNotes(editorElement, host) {
                 let note = octave >= 5 ? letter.toLowerCase() + "'".repeat(octave - 5) : letter + ','.repeat(Math.max(0, 4 - octave));
                 return { text: prefix + note, key, previousAccidental, accidental };
             }
-            function insertRecordedNote(state) {
-                if (!recording || state.midi === null) return;
-                const spelling = noteToken(state.midi);
-                const token = spelling.text + (state.recordLength === '1' ? '' : state.recordLength);
+            function insertRecordedText(token, spelling = null) {
+                if (!recording) return;
                 const start = editor.selectionStart, end = editor.selectionEnd;
                 const delta = token.length - (end - start);
                 for (const edit of recordedEdits) {
@@ -368,20 +427,27 @@ function initializeMusicNotes(editorElement, host) {
                     if (end <= edit.start) edit.start += delta;
                     else if (start < editEnd && end > edit.start) recordedEdits.length = 0;
                 }
-                recordedEdits.push({ start, text: token, replaced: editor.value.slice(start, end), accidentalKey: spelling.key, previousAccidental: spelling.previousAccidental, accidental: spelling.accidental });
+                recordedEdits.push({ start, text: token, replaced: editor.value.slice(start, end), accidentalKey: spelling?.key, previousAccidental: spelling?.previousAccidental, accidental: spelling?.accidental });
                 editor.setRangeText(token, start, end, 'end');
                 host.querySelector('#undo-record').disabled = false;
                 historyMutation = true;
                 editor.dispatchEvent(new Event('input', { bubbles: true }));
                 historyMutation = false;
             }
+            function insertRecordedNote(state) {
+                if (!recording || state.midi === null) return;
+                const spelling = noteToken(state.midi);
+                insertRecordedText(spelling.text + (state.recordLength === '1' ? '' : state.recordLength), spelling);
+            }
             function undoRecordedNote() {
                 const edit = recordedEdits.pop();
                 if (!edit) return;
                 if (editor.value.slice(edit.start, edit.start + edit.text.length) === edit.text) {
                     editor.setRangeText(edit.replaced, edit.start, edit.start + edit.text.length, 'end');
-                    if (edit.previousAccidental === null) recordedAccidentals.delete(edit.accidentalKey);
-                    else recordedAccidentals.set(edit.accidentalKey, edit.previousAccidental);
+                    if (edit.accidentalKey) {
+                        if (edit.previousAccidental === null) recordedAccidentals.delete(edit.accidentalKey);
+                        else recordedAccidentals.set(edit.accidentalKey, edit.previousAccidental);
+                    }
                     const delta = edit.replaced.length - edit.text.length;
                     for (const earlier of recordedEdits) if (edit.start + edit.text.length <= earlier.start) earlier.start += delta;
                     historyMutation = true;
@@ -426,12 +492,22 @@ function initializeMusicNotes(editorElement, host) {
                 const node = document.elementFromPoint(x, y)?.closest('.music-notes-key');
                 return node && keysElement.contains(node) ? node : null;
             }
-            function releasePointer(pointerId) {
+            let pinchState = null;
+            function releasePointer(pointerId, wasTap = false) {
                 const state = pointerStates.get(pointerId); if (!state) return;
+                const partOfPinch = pinchState?.ids.includes(pointerId);
                 if (state.voiceId) stopNote(state.voiceId);
                 finishRecordedKey(state);
-                if (state.mode === 'pan' && Math.abs(roll.scrollLeft - state.originScroll) < whiteWidth) roll.scrollLeft = state.originScroll;
+                if (!partOfPinch && state.mode === 'pan' && Math.abs(roll.scrollLeft - state.originScroll) < whiteWidth) roll.scrollLeft = state.originScroll;
                 pointerStates.delete(pointerId);
+                if (pinchState?.ids.includes(pointerId)) {
+                    pinchState.released.add(pointerId);
+                    if (pinchState.ids.every(id => pinchState.released.has(id))) {
+                        const finishedPinch = pinchState;
+                        pinchState = null;
+                        if (wasTap && !finishedPinch.moved && finishedPinch.ids.every(id => finishedPinch.startedPan.has(id))) resetPianoRollView();
+                    }
+                }
                 if (!pointerStates.size) roll.classList.remove('panning');
             }
             function updateKeyboardLayout() {
@@ -456,29 +532,54 @@ function initializeMusicNotes(editorElement, host) {
                 editor.blur();
                 const rect = roll.getBoundingClientRect(), y = event.clientY - rect.top;
                 const key = keyAtPoint(event.clientX, event.clientY);
-                if (!key && y > roll.clientHeight * 0.22) return;
+                const inPanZone = y <= whiteWidth;
+                if (!key && !inPanZone) return;
                 event.preventDefault();
-                const mode = y <= roll.clientHeight * 0.22 ? 'pan' : 'note';
+                const mode = inPanZone ? 'pan' : 'note';
                 const midi = mode === 'note' && key ? Number(key.dataset.midi) : null;
-                const voiceId = midi === null ? null : playNote(midi, `pointer-${event.pointerId}`);
-                const state = { midi, voiceId, mode, lastX: event.clientX, originScroll: roll.scrollLeft, recordLength: noteLength.value };
+                const now = performance.now();
+                const duplicate = midi !== null && lastPointerNote?.midi === midi && now - lastPointerNote.time < 10;
+                const actualMidi = duplicate ? null : midi;
+                if (midi !== null && !duplicate) lastPointerNote = { midi, time: now };
+                const voiceId = actualMidi === null ? null : playNote(actualMidi, `pointer-${event.pointerId}`);
+                const state = { midi: actualMidi, voiceId, mode, lastX: event.clientX, lastY: event.clientY, startX: event.clientX, startY: event.clientY, startedPan: inPanZone, pointerType: event.pointerType, duplicate, duplicateUntil: now + 10, originScroll: roll.scrollLeft, recordLength: noteLength.value };
                 pointerStates.set(event.pointerId, state);
-                if (midi !== null) startRecordedKey(state);
+                if (actualMidi !== null) startRecordedKey(state);
                 if (mode === 'pan') roll.classList.add('panning');
                 roll.setPointerCapture(event.pointerId);
+                const panTouches = [...pointerStates.entries()].filter(([, item]) => item.startedPan && item.pointerType !== 'mouse');
+                if (panTouches.length >= 2) {
+                    const [a, b] = panTouches.slice(-2);
+                    pinchState = { ids: [a[0], b[0]], startedPan: new Set([a[0], b[0]]), released: new Set(), distance: Math.hypot(a[1].lastX - b[1].lastX, a[1].lastY - b[1].lastY), width: whiteWidth, moved: false };
+                }
             });
             roll.addEventListener('pointermove', event => {
                 const state = pointerStates.get(event.pointerId); if (!state) return;
+                const previousX = state.lastX;
+                state.lastX = event.clientX; state.lastY = event.clientY;
+                if (pinchState?.ids.includes(event.pointerId)) {
+                    const [first, second] = pinchState.ids.map(id => pointerStates.get(id));
+                    if (first && second) {
+                        const distance = Math.hypot(first.lastX - second.lastX, first.lastY - second.lastY);
+                        if (Math.abs(distance - pinchState.distance) <= 5) { event.preventDefault(); return; }
+                        pinchState.moved = true;
+                        const ratio = Math.pow(distance / Math.max(1, pinchState.distance), 0.3);
+                        resizeKeyboard(pinchState.width * ratio, (first.lastX + second.lastX) / 2 - roll.getBoundingClientRect().left);
+                    }
+                    event.preventDefault(); return;
+                }
                 const rect = roll.getBoundingClientRect(), y = event.clientY - rect.top, key = keyAtPoint(event.clientX, event.clientY);
-                const isPanBand = y <= roll.clientHeight * 0.22;
+                const isPanBand = y <= whiteWidth;
                 if (state.mode === 'pan') {
-                    roll.scrollLeft += state.lastX - event.clientX; state.lastX = event.clientX; event.preventDefault(); return;
+                    roll.scrollLeft += previousX - event.clientX; event.preventDefault(); return;
                 }
                 if (isPanBand) {
                     state.mode = 'pan'; state.lastX = event.clientX;
                     roll.classList.add('panning'); event.preventDefault(); return;
                 }
                 roll.classList.remove('panning');
+                if (state.duplicate && performance.now() < state.duplicateUntil) { event.preventDefault(); return; }
+                state.duplicate = false;
                 if (key && Number(key.dataset.midi) !== state.midi) {
                     if (state.voiceId) stopNote(state.voiceId);
                     finishRecordedKey(state);
@@ -488,12 +589,12 @@ function initializeMusicNotes(editorElement, host) {
                 }
                 event.preventDefault();
             });
-            roll.addEventListener('pointerup', event => releasePointer(event.pointerId));
+            roll.addEventListener('pointerup', event => releasePointer(event.pointerId, true));
             roll.addEventListener('pointercancel', event => releasePointer(event.pointerId));
             roll.addEventListener('lostpointercapture', event => releasePointer(event.pointerId));
             roll.addEventListener('contextmenu', event => event.preventDefault());
             host.querySelector('#new-tune').addEventListener('click', () => {
-                const starter = 'X: 1\nM: 4/4\nL: 1/8\nQ: 1/4=120\n';
+                const starter = 'X: 1\nM: 4/4\nL: 1/8\nQ: 1/4=120\nR: reel\nK: C\n';
                 if (editor.value && !window.confirm('Replace the current ABC text with a new tune header?')) return;
                 editor.value = starter;
                 editor.dispatchEvent(new Event('input', { bubbles: true }));
@@ -517,8 +618,10 @@ function initializeMusicNotes(editorElement, host) {
                 recording = !recording;
                 recordButton.classList.toggle('active', recording);
                 recordButton.setAttribute('aria-pressed', String(recording));
+                host.querySelector('#recording-inserts').hidden = !recording;
             }
             recordButton.addEventListener('click', toggleRecording);
+            host.querySelectorAll('[data-record-text]').forEach(button => button.addEventListener('click', () => insertRecordedText(button.dataset.recordText)));
             host.querySelector('#undo-record').addEventListener('click', undoRecordedNote);
             document.addEventListener('keydown', event => {
                 if (host.hidden) return;
@@ -580,7 +683,11 @@ function initializeMusicNotes(editorElement, host) {
             });
             buildKeyboard();
             loadSampleArchive().catch(error => console.error(error));
-            return Object.freeze({ refresh: resetForEditorChange, suspend: resetForEditorChange, loadSamples: loadSampleArchive });
+            return Object.freeze({
+                refresh() { resetForEditorChange(); requestAnimationFrame(restorePianoRollPosition); },
+                suspend: resetForEditorChange,
+                loadSamples: loadSampleArchive
+            });
         
 }
 
