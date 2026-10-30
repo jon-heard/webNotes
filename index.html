@@ -1,527 +1,3 @@
-<?php
-// Handle API actions
-$action = isset($_GET['action']) ? $_GET['action'] : null;
-
-// Store all notes in the dedicated notes folder.
-$notesDir = __DIR__ . '/notes';
-if (!is_dir($notesDir)) {
-    mkdir($notesDir, 0755, true);
-}
-function getNoteFilePath($filename) {
-    global $notesDir;
-    return $notesDir . '/' . $filename . '.nts';
-}
-
-if ($action === 'loadfile') {
-    header('Content-Type: application/json');
-
-    if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-        http_response_code(405);
-        echo json_encode(['error' => 'Method not allowed']);
-        exit;
-    }
-
-    $filename = isset($_GET['filename']) ? $_GET['filename'] : 'default';
-
-    // Validate filename - must match note name pattern (start with letter or underscore)
-    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $filename)) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Invalid filename']);
-        exit;
-    }
-
-    $filepath = getNoteFilePath($filename);
-
-    if (!file_exists($filepath)) {
-        // Return default empty structure if file doesn't exist
-        // Use the filename as the root note name
-        echo json_encode([
-            'name' => $filename
-        ]);
-        exit;
-    }
-
-    $content = file_get_contents($filepath);
-
-    if ($content === false) {
-        http_response_code(500);
-        echo json_encode(['error' => 'Failed to read file']);
-        exit;
-    }
-
-    // Return the raw JSON content
-    echo $content;
-    exit;
-}
-
-if ($action === 'savefile') {
-    header('Content-Type: application/json');
-
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        http_response_code(405);
-        echo json_encode(['error' => 'Method not allowed']);
-        exit;
-    }
-
-    $input = json_decode(file_get_contents('php://input'), true);
-
-    if (!isset($input['filename']) || !isset($input['content'])) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Missing filename or content']);
-        exit;
-    }
-
-    $filename = $input['filename'];
-    $content = $input['content'];
-
-    // Validate filename - must match note name pattern (start with letter or underscore)
-    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $filename)) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Invalid filename']);
-        exit;
-    }
-
-    $filepath = getNoteFilePath($filename);
-
-    if (!is_string($content) || json_decode($content) === null || json_last_error() !== JSON_ERROR_NONE) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Invalid note content']);
-        exit;
-    }
-    if (file_put_contents($filepath, $content, LOCK_EX) === false) {
-        http_response_code(500);
-        echo json_encode(['error' => 'Failed to save file']);
-        exit;
-    }
-
-    echo json_encode(['success' => true]);
-    exit;
-}
-
-if ($action === 'createfile') {
-    header('Content-Type: application/json');
-
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        http_response_code(405);
-        echo json_encode(['error' => 'Method not allowed']);
-        exit;
-    }
-
-    $input = json_decode(file_get_contents('php://input'), true);
-
-    if (!isset($input['filename'])) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Missing filename']);
-        exit;
-    }
-
-    $filename = $input['filename'];
-
-    // Validate filename - must match note name pattern (start with letter or underscore)
-    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $filename)) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Invalid filename']);
-        exit;
-    }
-
-    $filepath = getNoteFilePath($filename);
-
-    if (file_exists($filepath)) {
-        http_response_code(400);
-        echo json_encode(['error' => 'File already exists']);
-        exit;
-    }
-
-    // Create file with just the root note name
-    $content = json_encode(['name' => $filename], JSON_PRETTY_PRINT);
-    if (file_put_contents($filepath, $content) === false) {
-        http_response_code(500);
-        echo json_encode(['error' => 'Failed to create file']);
-        exit;
-    }
-
-    echo json_encode(['success' => true]);
-    exit;
-}
-
-if ($action === 'renamefile') {
-    header('Content-Type: application/json');
-
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        http_response_code(405);
-        echo json_encode(['error' => 'Method not allowed']);
-        exit;
-    }
-
-    $input = json_decode(file_get_contents('php://input'), true);
-
-    if (!isset($input['oldname']) || !isset($input['newname'])) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Missing oldname or newname']);
-        exit;
-    }
-
-    $oldname = $input['oldname'];
-    $newname = $input['newname'];
-
-    // Validate filenames
-    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $oldname) || !preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $newname)) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Invalid filename']);
-        exit;
-    }
-
-    $oldpath = getNoteFilePath($oldname);
-    $newpath = getNoteFilePath($newname);
-
-    if (!file_exists($oldpath)) {
-        http_response_code(404);
-        echo json_encode(['error' => 'File not found']);
-        exit;
-    }
-
-    if (file_exists($newpath)) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Target file already exists']);
-        exit;
-    }
-
-    if (!rename($oldpath, $newpath)) {
-        http_response_code(500);
-        echo json_encode(['error' => 'Failed to rename file']);
-        exit;
-    }
-
-    echo json_encode(['success' => true]);
-    exit;
-}
-
-if ($action === 'deletefile') {
-    header('Content-Type: application/json');
-
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        http_response_code(405);
-        echo json_encode(['error' => 'Method not allowed']);
-        exit;
-    }
-
-    $input = json_decode(file_get_contents('php://input'), true);
-
-    if (!isset($input['filename'])) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Missing filename']);
-        exit;
-    }
-
-    $filename = $input['filename'];
-
-    // Validate filename
-    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $filename)) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Invalid filename']);
-        exit;
-    }
-
-    $filepath = getNoteFilePath($filename);
-
-    if (!file_exists($filepath)) {
-        http_response_code(404);
-        echo json_encode(['error' => 'File not found']);
-        exit;
-    }
-
-    if (!unlink($filepath)) {
-        http_response_code(500);
-        echo json_encode(['error' => 'Failed to delete file']);
-        exit;
-    }
-
-    echo json_encode(['success' => true]);
-    exit;
-}
-
-
-
-$notesParam = isset($_GET['notes']) ? $_GET['notes'] : null;
-
-// If no notes parameter, show file listing
-if ($notesParam === null) {
-    $ntsFiles = glob($notesDir . '/*.nts') ?: [];
-    // Sort by modification time (most recent first)
-    usort($ntsFiles, function($a, $b) {
-        return filemtime($b) - filemtime($a);
-    });
-    ?>
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <title>Web Notes - Select Notes File</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta charset="UTF-8">
-	<link rel="icon" type="image/png" href="./icon.png" />
-        <link rel="manifest" href="./manifest.webmanifest">
-        <meta name="color-scheme" content="light">
-        <meta name="theme-color" content="#4080ff">
-        <style>
-            body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                max-width: 600px;
-                margin: 50px auto;
-                padding: 20px;
-            }
-            h1 { margin-bottom: 20px; }
-            .file-list {
-                list-style: none;
-                padding: 0;
-            }
-            .file-list li {
-                margin: 10px 0;
-                display: flex;
-                align-items: center;
-                gap: 8px;
-            }
-            .file-list a {
-                flex: 1;
-                padding: 15px 20px;
-                background: #f5f5f5;
-                border-radius: 8px;
-                text-decoration: none;
-                color: #333;
-                font-size: 18px;
-            }
-            .file-list a:hover {
-                background: #e0e0e0;
-            }
-            .file-list .file-btn {
-                padding: 10px 12px;
-                font-size: 14px;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-            }
-            .file-list .btn-rename {
-                background: #f0ad4e;
-                color: white;
-            }
-            .file-list .btn-rename:hover {
-                background: #ec971f;
-            }
-            .file-list .btn-delete {
-                background: #d9534f;
-                color: white;
-            }
-            .file-list .btn-delete:hover {
-                background: #c9302c;
-            }
-            .new-file {
-                margin-top: 30px;
-                padding-top: 20px;
-                border-top: 1px solid #ddd;
-            }
-            .new-file input {
-                padding: 10px 15px;
-                font-size: 16px;
-                border: 1px solid #ccc;
-                border-radius: 4px;
-                width: 200px;
-            }
-            .new-file button {
-                padding: 10px 20px;
-                font-size: 16px;
-                background: #4080ff;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-                margin-left: 10px;
-            }
-            .new-file button:hover {
-                background: #3070e0;
-            }
-            .empty-message {
-                color: #666;
-                font-style: italic;
-            }
-            .header-row {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }
-            #btn-night {
-                padding: 8px 12px;
-                font-size: 18px;
-                background: #e0e0e0;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-            }
-            #btn-night:hover {
-                background: #d0d0d0;
-            }
-            /* Night mode styles */
-            body.night-mode {
-                background: #1a1a2e;
-                color: #e0e0e0;
-            }
-            body.night-mode .file-list a {
-                background: #2a2a4e;
-                color: #e0e0e0;
-            }
-            body.night-mode .file-list a:hover {
-                background: #3a3a5e;
-            }
-            body.night-mode .new-file {
-                border-top-color: #444;
-            }
-            body.night-mode .new-file input {
-                background: #2a2a4e;
-                border-color: #444;
-                color: #e0e0e0;
-            }
-            body.night-mode .new-file button {
-                background: #3060c0;
-            }
-            body.night-mode .new-file button:hover {
-                background: #2050b0;
-            }
-            body.night-mode #btn-night {
-                background: #3a3a5e;
-                color: #e0e0e0;
-            }
-            body.night-mode #btn-night:hover {
-                background: #4a4a6e;
-            }
-            body.night-mode .empty-message {
-                color: #888;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="header-row">
-            <h1>Web Notes</h1>
-            <button id="btn-night" title="Toggle Night Mode">&#9681;</button>
-        </div>
-        <h2>Select a notes file:</h2>
-        <?php if (count($ntsFiles) > 0): ?>
-            <ul class="file-list">
-                <?php foreach ($ntsFiles as $file):
-                    $name = pathinfo($file, PATHINFO_FILENAME);
-                ?>
-                    <li>
-                        <a href="?notes=<?php echo urlencode($name); ?>"><?php echo htmlspecialchars($name); ?></a>
-                        <button class="file-btn btn-rename" data-name="<?php echo htmlspecialchars($name); ?>" title="Rename">&#9998;</button>
-                        <button class="file-btn btn-delete" data-name="<?php echo htmlspecialchars($name); ?>" title="Delete">&#10005;</button>
-                    </li>
-                <?php endforeach; ?>
-            </ul>
-        <?php else: ?>
-            <p class="empty-message">No notes files found.</p>
-        <?php endif; ?>
-
-        <div class="new-file">
-            <h3>Create new notes file:</h3>
-            <form id="createForm">
-                <input type="text" id="newNotesName" placeholder="Enter name..." title="Spaces will be changed to underscores" required>
-                <button type="submit">Create</button>
-            </form>
-        </div>
-        <script>
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('./service-worker.js').catch(err => console.error('Service worker registration failed:', err));
-            }
-            const validPattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
-            const normalizeName = value => value.trim().replace(/\s+/g, '_');
-
-            document.getElementById('createForm').addEventListener('submit', async function(e) {
-                e.preventDefault();
-                const name = normalizeName(document.getElementById('newNotesName').value);
-                if (!validPattern.test(name)) {
-                    alert('Notes name must be a proper identifier.');
-                    return;
-                }
-                try {
-                    const response = await fetch('?action=createfile', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ filename: name })
-                    });
-                    const result = await response.json();
-                    if (response.ok) {
-                        document.getElementById('newNotesName').value = '';
-                        location.reload();
-                    } else {
-                        alert(result.error || 'Failed to create file');
-                    }
-                } catch (err) {
-                    alert('Error creating file: ' + err.message);
-                }
-            });
-
-            document.querySelectorAll('.btn-rename').forEach(btn => {
-                btn.addEventListener('click', async function() {
-                    const oldName = this.dataset.name;
-                    const newNameInput = prompt('Enter new name (spaces become underscores):', oldName);
-                    const newName = newNameInput === null ? null : normalizeName(newNameInput);
-                    if (newName === null || newName === oldName) return;
-                    if (!validPattern.test(newName)) {
-                        alert('Notes name must be a proper identifier.');
-                        return;
-                    }
-                    try {
-                        const response = await fetch('?action=renamefile', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ oldname: oldName, newname: newName })
-                        });
-                        const result = await response.json();
-                        if (response.ok) {
-                            location.reload();
-                        } else {
-                            alert(result.error || 'Failed to rename file');
-                        }
-                    } catch (err) {
-                        alert('Error renaming file: ' + err.message);
-                    }
-                });
-            });
-
-            document.querySelectorAll('.btn-delete').forEach(btn => {
-                btn.addEventListener('click', async function() {
-                    const name = this.dataset.name;
-                    if (!confirm('Delete "' + name + '"?')) return;
-                    try {
-                        const response = await fetch('?action=deletefile', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ filename: name })
-                        });
-                        const result = await response.json();
-                        if (response.ok) {
-                            location.reload();
-                        } else {
-                            alert(result.error || 'Failed to delete file');
-                        }
-                    } catch (err) {
-                        alert('Error deleting file: ' + err.message);
-                    }
-                });
-            });
-
-            // Night mode
-            if (localStorage.getItem('nightMode') === 'true') {
-                document.body.classList.add('night-mode');
-            }
-            document.getElementById('btn-night').addEventListener('click', function() {
-                const isNight = document.body.classList.toggle('night-mode');
-                localStorage.setItem('nightMode', isNight);
-            });
-        </script>
-    </body>
-    </html>
-    <?php
-    exit;
-}
-?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -531,7 +7,21 @@ if ($notesParam === null) {
     <link rel="icon" type="image/png" href="./icon.png" />
     <link rel="manifest" href="./manifest.webmanifest">
     <meta name="theme-color" content="#4080ff">
+    <script src="filestore.js"></script>
+    <script>setStorageDir('notes'); if (!new URLSearchParams(location.search).has('notes')) document.documentElement.classList.add('picker-mode');</script>
     <style>
+        html.picker-mode body > *:not(#notes-picker) { display: none !important; }
+        #notes-picker { display: none; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+        html.picker-mode #notes-picker { display: block; }
+        #notes-picker .file-list { list-style: none; padding: 0; }
+        #notes-picker li { margin: 10px 0; display: flex; align-items: center; gap: 8px; }
+        #notes-picker .file-link { flex: 1; padding: 15px 20px; background: #f5f5f5; border-radius: 8px; text-decoration: none; color: #333; font-size: 18px; }
+        #notes-picker button { padding: 9px 12px; border: 0; border-radius: 4px; cursor: pointer; }
+        #notes-picker .new-file { margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; }
+        #notes-picker input { padding: 10px 15px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; width: 200px; }
+        #notes-picker .create-button { background: #4080ff; color: white; }
+        #notes-picker .empty-message { color: #666; font-style: italic; }
+
         * {
             margin: 0;
             padding: 0;
@@ -1243,6 +733,11 @@ if ($notesParam === null) {
     </style>
 </head>
 <body>
+    <main id="notes-picker">
+        <div style="display:flex;justify-content:space-between;align-items:center"><h1>Web Notes</h1><button id="btn-night" title="Toggle Night Mode">&#9681;</button></div>
+        <h2>Select a notes file:</h2><ul id="notes-file-list" class="file-list"></ul><p id="notes-empty" class="empty-message" hidden>No notes files found.</p>
+        <div class="new-file"><h3>Create new notes file:</h3><form id="createForm"><input type="text" id="newNotesName" placeholder="Enter name..." title="Spaces will be changed to underscores" required><button class="create-button" type="submit">Create</button></form></div>
+    </main>
     <div id="sidebar">
         <div id="hierarchy"></div>
         <div id="sidebar-buttons">
@@ -1631,18 +1126,8 @@ if ($notesParam === null) {
                         }
                         const revisionBeingSaved = editRevision;
                         const cleanedData = cleanNoteForSave(notesData);
-                        const response = await fetch('?action=savefile', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                filename: getNotesFilename(),
-                                content: JSON.stringify(cleanedData, null, 2)
-                            })
-                        });
-                        const result = await response.json();
-                        if (!response.ok || result.success !== true) {
-                            throw new Error(result.error || 'Server did not confirm the save');
-                        }
+                        const success = await saveFile(`${getNotesFilename()}.nts`, JSON.stringify(cleanedData, null, 2));
+                        if (!success) throw new Error('Server did not confirm the save');
                         if (revisionBeingSaved === editRevision) isDirty = false;
                         updateDirtyIndicator();
                     } while (isDirty);
@@ -1664,18 +1149,17 @@ if ($notesParam === null) {
         // Load notes from file
         async function loadNotes() {
             try {
-                const response = await fetch(`?action=loadfile&filename=${encodeURIComponent(getNotesFilename())}`);
-                if (response.ok) {
-                    notesData = await response.json();
-                    normalizeNote(notesData, true);
-                    if (tabs.length === 0) {
-                        addTab(getRootPath());
-                    } else {
-                        renderTabs();
-                        updateEditor();
-                    }
-                    renderHierarchy();
+                const filename = getNotesFilename();
+                const content = await loadFile(`${filename}.nts`, null, JSON.stringify({ name: filename }));
+                notesData = JSON.parse(content);
+                normalizeNote(notesData, true);
+                if (tabs.length === 0) {
+                    addTab(getRootPath());
+                } else {
+                    renderTabs();
+                    updateEditor();
                 }
+                renderHierarchy();
             } catch (err) {
                 console.error('Error loading notes:', err);
             }
@@ -3388,7 +2872,7 @@ if ($notesParam === null) {
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
-            loadNotes();
+            if (new URLSearchParams(location.search).has('notes')) loadNotes();
 
             const editor = document.getElementById('editor');
 
@@ -3959,5 +3443,67 @@ if ($notesParam === null) {
             }
         });
     </script>
+
+<script>
+(() => {
+  const validPattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+  const normalizeName = value => value.trim().replace(/\s+/g, '_');
+  const filename = name => `${name}.nts`;
+  const list = document.getElementById('notes-file-list');
+  if (!list) return;
+
+  async function refreshFiles() {
+    const files = await listFiles('nts');
+    list.replaceChildren();
+    document.getElementById('notes-empty').hidden = files.length !== 0;
+    for (const file of files) {
+      const name = file.slice(0, -4);
+      const row = document.createElement('li');
+      const link = document.createElement('a');
+      link.className = 'file-link'; link.href = `?notes=${encodeURIComponent(name)}`; link.textContent = name;
+      const rename = document.createElement('button'); rename.type = 'button'; rename.textContent = '✎'; rename.title = 'Rename';
+      rename.addEventListener('click', async () => {
+        const entered = prompt('Enter new name (spaces become underscores):', name);
+        if (entered === null) return;
+        const next = normalizeName(entered);
+        if (!validPattern.test(next)) return alert('Notes name must be a proper identifier.');
+        if (next === name) return;
+        if (await renameStoredFile(filename(name), filename(next))) await refreshFiles();
+        else alert('Failed to rename file.');
+      });
+      const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×'; remove.title = 'Delete';
+      remove.addEventListener('click', async () => {
+        if (!confirm(`Delete "${name}"?`)) return;
+        if (await deleteStoredFile(filename(name))) await refreshFiles();
+        else alert('Failed to delete file.');
+      });
+      row.append(link, rename, remove); list.append(row);
+    }
+  }
+
+  document.getElementById('createForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const name = normalizeName(document.getElementById('newNotesName').value);
+    if (!validPattern.test(name)) return alert('Notes name must be a proper identifier.');
+    const existing = await listFiles('nts');
+    if (existing.includes(filename(name))) return alert('A notes file with that name already exists.');
+    const saved = await saveFile(filename(name), JSON.stringify({ name }, null, 2));
+    if (saved) location.href = `?notes=${encodeURIComponent(name)}`;
+    else alert('Failed to create file.');
+  });
+  const night = document.getElementById('btn-night');
+  if (localStorage.getItem('nightMode') === 'true') document.body.classList.add('night-mode');
+  night.addEventListener('click', () => {
+    const enabled = document.body.classList.toggle('night-mode');
+    localStorage.setItem('nightMode', String(enabled));
+  });
+  refreshFiles().catch(error => {
+    console.error('Could not list note files:', error);
+    document.getElementById('notes-empty').hidden = false;
+    document.getElementById('notes-empty').textContent = 'Could not load notes files.';
+  });
+})();
+</script>
+
 </body>
 </html>

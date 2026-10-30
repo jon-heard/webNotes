@@ -1,0 +1,25 @@
+<html>
+  <head>
+    <style>
+      #first
+      {
+        background-color: red; height: 20rem;
+      }
+      #second
+      {
+        background-color: blue; height: 20rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>V7</h1>
+    <div id="first"></div>
+    <div id="second"></div>
+  </body>
+</html>
+<script>
+    const second = document.getElementById('second');
+    second.addEventListener('touchstart', e => {
+      e.preventDefault();
+    });
+</script>
