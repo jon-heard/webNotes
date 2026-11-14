@@ -43,7 +43,7 @@ window.MusicNotes.mount = function(editorElement, host) {
             .music-notes-keys { position: relative; height: 100%; }
             .music-notes-key { position: absolute; top: 0; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 7px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
             .music-notes-white-key { z-index: 1; width: var(--white-key); height: 100%; border: 0; border-right: 1px solid #888; border-bottom: 1px solid #888; box-shadow: inset 0 1px #888; border-radius: 0 0 3px 3px; background: linear-gradient(to bottom, #c8c8c8 0 33.333%, #eee 33.333% 100%); color: #555; }
-            .music-notes-white-key.violin-open-string { background: linear-gradient(to bottom, #579fda 0 33.333%, #a8d9ff 33.333% 100%); }
+            .music-notes-white-key.violinNote { background: linear-gradient(to bottom, #579fda 0 33.333%, #a8d9ff 33.333% 100%); }
             .music-notes-keys > .music-notes-white-key:first-child { border-left: 1px solid #888; }
             .music-notes-black-key { z-index: 2; width: var(--black-key); height: calc(var(--white-key) * 2); border: 1px solid #111; border-radius: 0 0 3px 3px; background: #17181a; color: #ddd; }
             .music-notes-key-label { pointer-events: none; font: 16px ui-monospace, monospace; }
@@ -74,7 +74,7 @@ window.MusicNotes.mount = function(editorElement, host) {
             </div>
             <div class="music-notes-cluster">
                 <button id="metronome" type="button" aria-pressed="false" title="Toggle metronome" aria-label="Toggle metronome">♥</button>
-                <select id="beat-frequency" aria-label="Metronome beat interval" title="Beat interval in multiples of the ABC L: unit">
+                <select id="beat-frequency" aria-label="Metronome beat interval" title="Divide Q: BPM by this value to set the metronome BPM">
                     <option value="1/4">1/4</option><option value="1/2">1/2</option><option value="3/4">3/4</option><option value="1" selected>1</option>
                     <option value="3/2">3/2</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
                 </select>
@@ -93,7 +93,7 @@ window.MusicNotes.mount = function(editorElement, host) {
                 <h2 id="music-key-title">Tune key</h2>
                 <label>Key <select id="music-key-select"></select></label>
                 <label>Octave <select id="music-key-octave"></select></label>
-                <label><input id="music-key-transpose" type="checkbox"> Transpose notes</label>
+                <label><input id="music-key-transpose" type="checkbox" checked> Transpose notes</label>
                 <div class="music-notes-key-actions"><button id="music-key-cancel" type="button">Cancel</button><button id="music-key-ok" type="button">OK</button></div>
             </div>
         </div>
@@ -155,7 +155,7 @@ function initializeMusicNotes(editorElement, host) {
             const midiSamples = new Map(), sampleFiles = new Map(), decodedSamples = new Map(), activeVoices = new Map(), keyVoiceCounts = new Map(), pointerStates = new Map();
             let audioContext = null, compressor = null, nextVoice = 1, whiteCount = 0, playbackAudioOrigin = 0;
             let sampleArchivePromise = null;
-            let events = [], preparedText = '', totalMs = 0, metronomeBeatMs = 500, abcQpm = 120, abcUnitLength = 1 / 8, playbackState = 'stopped', playbackElapsed = 0, playbackRate = 1, playbackRun = 0, recording = false, metronomeEnabled = false;
+            let events = [], preparedText = '', totalMs = 0, metronomeBeatMs = 500, abcQpm = 120, abcQUnitLength = 1 / 4, playbackState = 'stopped', playbackElapsed = 0, playbackRate = 1, playbackRun = 0, recording = false, metronomeEnabled = false;
             let playbackTimers = new Set(), metronomeNodes = new Set(), playbackVoices = new Set(), previewVoices = new Set(), previewTimers = new Set();
             let lastPointerNote = null;
 
@@ -324,7 +324,7 @@ function initializeMusicNotes(editorElement, host) {
                 for (let midi = minMidi; midi <= maxMidi; midi++) if (whitePitches.has(midi % 12)) {
                     const key = document.createElement('div');
                     key.className = 'music-notes-key music-notes-white-key'; key.dataset.midi = midi; key.setAttribute('role', 'button'); key.setAttribute('aria-label', noteName(midi));
-                    if ([55, 62, 69, 76].includes(midi)) key.classList.add('violin-open-string');
+                    if ([55, 62, 69, 76, 83].includes(midi)) key.classList.add('violinNote');
                     key.style.left = `${whiteCount * whiteWidth}px`;
                     if (midi % 12 === 0 || midi === minMidi) {
                         const label = document.createElement('span'); label.className = 'music-notes-key-label'; label.textContent = noteName(midi); key.appendChild(label);
@@ -509,8 +509,9 @@ function initializeMusicNotes(editorElement, host) {
             }
             function updateMetronomeBeat() {
                 const [numerator, denominator = 1] = beatFrequency.value.split('/').map(Number);
-                const multiplier = numerator / denominator;
-                metronomeBeatMs = abcUnitLength * multiplier * 240000 / abcQpm;
+                const dropdownValue = numerator / denominator;
+                const effectiveBpm = abcQpm / dropdownValue;
+                metronomeBeatMs = 60000 / effectiveBpm;
             }
             function prepareTune() {
                 const source = editor.value;
@@ -519,11 +520,16 @@ function initializeMusicNotes(editorElement, host) {
                     const tune = window.ABCJS.parseOnly(source)[0];
                     if (!tune) throw new Error('No ABC tune found.');
                     const midi = tune.setUpAudio();
-                    const qpm = Number(midi.tempo) || 120, msPerWhole = 240000 / qpm, grouped = new Map();
+                    const grouped = new Map();
                     const hornpipe = /^\s*R\s*:\s*hornpipe\s*$/im.test(source);
-                    const lengthMatch = source.match(/^\s*L\s*:\s*(\d+)\s*\/\s*(\d+)/m);
-                    abcQpm = qpm;
-                    abcUnitLength = lengthMatch ? Number(lengthMatch[1]) / Number(lengthMatch[2]) : 1 / 8;
+                    const qField = source.match(/^\s*Q\s*:\s*([^\r\n]+)/m)?.[1];
+                    const qParts = qField?.split('=');
+                    const qUnitText = qParts?.length === 2 ? qParts[0].trim() : '';
+                    const qUnitMatch = qUnitText.match(/^(\d+(?:\.\d+)?)(?:\s*\/\s*(\d+(?:\.\d+)?))?$/);
+                    const qBpm = qParts?.length === 2 ? Number(qParts[1].trim()) : NaN;
+                    abcQpm = qUnitMatch && Number.isFinite(qBpm) && qBpm > 0 ? qBpm : Number(midi.tempo) || 120;
+                    abcQUnitLength = qUnitMatch ? Number(qUnitMatch[1]) / (qUnitMatch[2] ? Number(qUnitMatch[2]) : 1) : 1 / 4;
+                    const msPerWhole = 60000 / (abcQpm * abcQUnitLength);
                     updateMetronomeBeat();
                     for (const track of midi.tracks || []) for (const note of track) if (note.cmd === 'note') {
                         const swingTime = value => {
@@ -558,7 +564,8 @@ function initializeMusicNotes(editorElement, host) {
                 if (!metronomeEnabled) return;
                 for (let beatMs = 0; beatMs < totalMs; beatMs += metronomeBeatMs) {
                     if (beatMs < fromMs - 1) continue;
-                    metronomeClick(audioStartTime + (beatMs - fromMs) / (1000 * rate));
+                    const beatAudioTime = playbackAudioOrigin + beatMs / (1000 * rate);
+                    if (beatAudioTime >= audioContext.currentTime) metronomeClick(beatAudioTime);
                 }
             }
             function finishPlayback() {
@@ -696,6 +703,23 @@ function initializeMusicNotes(editorElement, host) {
                     text = text.slice(0, item.start) + item.text + text.slice(item.end);
                 }
                 return text;
+            }
+            function transposeChordSymbols(text, oldKey, newKey) {
+                const pitchClasses = { C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5, 'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11 };
+                const sharpNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+                const flatNames = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+                const shift = ((keyTonic(newKey).midi - keyTonic(oldKey).midi) % 12 + 12) % 12;
+                const names = prefersSharps(newKey) ? sharpNames : flatNames;
+                return text.replace(/"([A-G])([#b]?)([^"\r\n]*)"/g, (whole, letter, accidental, suffix) => {
+                    const transposeRoot = (root, modifier = '') => root in pitchClasses
+                        ? names[(pitchClasses[root] + shift) % 12] + modifier
+                        : root + modifier;
+                    let chord = transposeRoot(letter + accidental);
+                    const slash = /^([^/]*\/)([A-G])([#b]?)(.*)$/.exec(suffix);
+                    if (slash) chord += slash[1] + transposeRoot(slash[2] + slash[3]) + slash[4];
+                    else chord += suffix;
+                    return `"${chord}"`;
+                });
             }
             function applyEditorText(token, start, replaced, direction) {
                 const removeLength = direction === 'undo' ? token.length : replaced.length;
@@ -901,7 +925,7 @@ function initializeMusicNotes(editorElement, host) {
                 refreshTuneKey();
                 keySelect.value = keyForDropdown(currentKey);
                 octaveSelect.value = '0';
-                keyTranspose.checked = false;
+                keyTranspose.checked = true;
                 keyDialog.hidden = false;
             });
             host.querySelector('#music-key-cancel').addEventListener('click', closeKeyDialog);
@@ -910,14 +934,23 @@ function initializeMusicNotes(editorElement, host) {
                 const source = editor.value, info = headerInfo(source), nextKey = keySelect.value || 'C';
                 const octaveShift = Number(octaveSelect.value) || 0;
                 let updated = source;
-                if (keyTranspose.checked) updated = transposeTuneNotes(source, info.key, nextKey, octaveShift);
+                if (keyTranspose.checked) {
+                    updated = transposeTuneNotes(source, info.key, nextKey, octaveShift);
+                    updated = transposeChordSymbols(updated, info.key, nextKey);
+                }
                 else if (octaveShift !== 0) updated = transposeTuneNotes(source, info.key, info.key, octaveShift);
                 updated = setHeaderKey(updated, nextKey);
                 if (updated !== source) {
-                    const caretStart = editor.selectionStart, caretEnd = editor.selectionEnd;
-                    editor.value = updated;
-                    editor.setSelectionRange(Math.min(caretStart, updated.length), Math.min(caretEnd, updated.length));
-                    editor.dispatchEvent(new Event('input', { bubbles: true }));
+                    const before = source, after = updated;
+                    const apply = value => {
+                        const caretStart = editor.selectionStart, caretEnd = editor.selectionEnd;
+                        editor.value = value;
+                        editor.setSelectionRange(Math.min(caretStart, value.length), Math.min(caretEnd, value.length));
+                        editor.dispatchEvent(new Event('input', { bubbles: true }));
+                    };
+                    const action = { undo: () => apply(before), redo: () => apply(after) };
+                    if (typeof window.applyEditorHistoryAction === 'function') window.applyEditorHistoryAction(action);
+                    else action.redo();
                 }
                 closeKeyDialog();
             });
