@@ -781,6 +781,7 @@
                 <button id="btn-undo" title="Undo">↶</button>
                 <button id="btn-redo" title="Redo">↷</button>
                 <button id="btn-insert-tab" title="Insert tab character">\t</button>
+                <button id="btn-copy-note" title="Copy entire note" aria-label="Copy entire note"><svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="13" height="13" rx="2"></rect><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"></path></svg></button>
             </div>
         </div>
     </div>
@@ -3060,19 +3061,29 @@
                 addTab(getRootPath());
             });
 
+            const editorToolbarButtons = document.querySelectorAll('#btn-undo, #btn-redo, #btn-insert-tab, #btn-copy-note');
+            editorToolbarButtons.forEach(button => button.addEventListener('mousedown', event => event.preventDefault()));
             document.getElementById('btn-undo').addEventListener('click', () => {
-                editor.focus();
                 if (!window.undoEditorHistoryAction()) document.execCommand('undo');
             });
             document.getElementById('btn-redo').addEventListener('click', () => {
-                editor.focus();
                 if (!window.redoEditorHistoryAction()) document.execCommand('redo');
             });
             document.getElementById('btn-insert-tab').addEventListener('click', () => {
-                editor.focus();
-                document.execCommand('insertText', false, '\t');
-                editor.dispatchEvent(new Event('input', { bubbles: true }));
+                const start = editor.selectionStart, end = editor.selectionEnd;
+                const replaced = editor.value.slice(start, end);
+                const apply = (text, removeLength) => {
+                    editor.setRangeText(text, start, start + removeLength, 'end');
+                    editor.dispatchEvent(new Event('input', { bubbles: true }));
+                };
+                const action = {
+                    undo: () => apply(replaced, 1),
+                    redo: () => apply('\t', replaced.length)
+                };
+                if (typeof window.applyEditorHistoryAction === 'function') window.applyEditorHistoryAction(action);
+                else action.redo();
             });
+            document.getElementById('btn-copy-note').addEventListener('click', () => copyToClipboard(editor.value));
 
             document.getElementById('btn-save').addEventListener('click', () => {
                 saveNotes();

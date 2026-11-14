@@ -43,6 +43,7 @@ window.MusicNotes.mount = function(editorElement, host) {
             .music-notes-keys { position: relative; height: 100%; }
             .music-notes-key { position: absolute; top: 0; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 7px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
             .music-notes-white-key { z-index: 1; width: var(--white-key); height: 100%; border: 0; border-right: 1px solid #888; border-bottom: 1px solid #888; box-shadow: inset 0 1px #888; border-radius: 0 0 3px 3px; background: linear-gradient(to bottom, #c8c8c8 0 33.333%, #eee 33.333% 100%); color: #555; }
+            .music-notes-white-key.violin-open-string { background: linear-gradient(to bottom, #579fda 0 33.333%, #a8d9ff 33.333% 100%); }
             .music-notes-keys > .music-notes-white-key:first-child { border-left: 1px solid #888; }
             .music-notes-black-key { z-index: 2; width: var(--black-key); height: calc(var(--white-key) * 2); border: 1px solid #111; border-radius: 0 0 3px 3px; background: #17181a; color: #ddd; }
             .music-notes-key-label { pointer-events: none; font: 16px ui-monospace, monospace; }
@@ -61,8 +62,8 @@ window.MusicNotes.mount = function(editorElement, host) {
             <div class="music-notes-cluster">
                 <button id="record" type="button" aria-pressed="false" title="Record notes into ABC">●</button>
                 <select id="note-length" aria-label="Recorded note length" title="Recorded note length">
-                    <option value="1/4">1/4 (1)</option><option value="1/3">1/3 (2)</option><option value="1/2">1/2 (3)</option><option value="3/4">3/4 (4)</option><option value="1" selected>1 (5)</option>
-                    <option value="3/2">3/2 (6)</option><option value="2">2 (7)</option><option value="3">3 (8)</option><option value="4">4 (9)</option>
+                    <option value="1/4">1/4</option><option value="1/3">1/3</option><option value="1/2">1/2</option><option value="3/4">3/4</option><option value="1" selected>1</option>
+                    <option value="3/2">3/2</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
                 </select>
             </div>
             <div class="music-notes-cluster">
@@ -323,6 +324,7 @@ function initializeMusicNotes(editorElement, host) {
                 for (let midi = minMidi; midi <= maxMidi; midi++) if (whitePitches.has(midi % 12)) {
                     const key = document.createElement('div');
                     key.className = 'music-notes-key music-notes-white-key'; key.dataset.midi = midi; key.setAttribute('role', 'button'); key.setAttribute('aria-label', noteName(midi));
+                    if ([55, 62, 69, 76].includes(midi)) key.classList.add('violin-open-string');
                     key.style.left = `${whiteCount * whiteWidth}px`;
                     if (midi % 12 === 0 || midi === minMidi) {
                         const label = document.createElement('span'); label.className = 'music-notes-key-label'; label.textContent = noteName(midi); key.appendChild(label);
@@ -717,13 +719,43 @@ function initializeMusicNotes(editorElement, host) {
                 const spelling = noteToken(state.midi);
                 insertRecordedText(spelling.text + (state.recordLength === '1' ? '' : state.recordLength));
             }
+            let pendingTap = null;
+            const doubleTapMs = 500;
+            function scheduleRecordedTap(state) {
+                if (!recording || state.midi === null) return;
+                if (pendingTap && pendingTap.midi === state.midi && performance.now() - pendingTap.time <= doubleTapMs) {
+                    clearTimeout(pendingTap.timer);
+                    state.recordOriginalLength = pendingTap.originalLength;
+                    state.recordOriginalIndex = pendingTap.originalIndex;
+                    const index = Math.min(noteLength.options.length - 1, [...noteLength.options].findIndex(option => option.value === noteLength.value) + 1);
+                    noteLength.value = noteLength.options[index].value;
+                    state.recordLength = noteLength.value;
+                    noteLength.classList.remove('flash'); void noteLength.offsetWidth; noteLength.classList.add('flash');
+                } else {
+                    if (pendingTap) { clearTimeout(pendingTap.timer); noteLength.value = pendingTap.originalLength; noteLength.classList.remove('flash'); insertRecordedNote(pendingTap.state); }
+                    state.recordOriginalLength = noteLength.value;
+                    state.recordOriginalIndex = [...noteLength.options].findIndex(option => option.value === noteLength.value);
+                    state.recordLength = noteLength.value;
+                }
+                const pending = { midi: state.midi, state, time: performance.now(), originalLength: state.recordOriginalLength, originalIndex: state.recordOriginalIndex, timer: null };
+                pending.timer = setTimeout(() => {
+                    if (pendingTap !== pending) return;
+                    noteLength.value = pending.originalLength;
+                    noteLength.classList.remove('flash');
+                    insertRecordedNote(pending.state);
+                    pendingTap = null;
+                }, doubleTapMs);
+                pendingTap = pending;
+            }
             function startRecordedKey(state) {
                 if (!recording || state.midi === null) return;
                 state.recordLength = noteLength.value;
                 state.recordOriginalLength = noteLength.value;
                 state.recordOriginalIndex = [...noteLength.options].findIndex(option => option.value === noteLength.value);
                 state.recordNextIndex = state.recordOriginalIndex + 1;
+                state.recordLong = false;
                 state.recordTimer = setInterval(() => {
+                    state.recordLong = true;
                     const index = state.recordNextIndex >= noteLength.options.length ? state.recordOriginalIndex : state.recordNextIndex;
                     state.recordNextIndex = index + 1;
                     noteLength.value = noteLength.options[index].value;
@@ -733,9 +765,8 @@ function initializeMusicNotes(editorElement, host) {
             }
             function finishRecordedKey(state) {
                 if (state.recordTimer) clearInterval(state.recordTimer);
-                if (state.recordOriginalLength) noteLength.value = state.recordOriginalLength;
-                noteLength.classList.remove('flash');
-                insertRecordedNote(state);
+                if (state.recordLong) { if (state.recordOriginalLength) noteLength.value = state.recordOriginalLength; noteLength.classList.remove('flash'); insertRecordedNote(state); }
+                else scheduleRecordedTap(state);
                 state.recordTimer = null; state.recordOriginalLength = null;
             }
             function previewEvent(index) {
