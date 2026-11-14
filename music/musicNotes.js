@@ -37,6 +37,10 @@ window.MusicNotes.mount = function(editorElement, host) {
             .music-notes-revision { color: #aaa; font: 11px ui-monospace, monospace; padding: 0 4px; }
             .music-notes-transport .duration.flash { animation: music-notes-duration-flash .18s ease-in-out 2 alternate; }
             @keyframes music-notes-duration-flash { to { background: #f1d34a; color: #332900; border-color: #ffe985; } }
+            .music-notes-staff-preview { box-sizing: border-box; padding: 0 .25rem .25rem 0; overflow: visible; color: #000; background: #fafafa; border-top: 1px solid #444; border-right: .25rem solid #222; border-bottom: .25rem solid #222; }
+            .music-notes-staff-preview:empty { height: .5rem; }
+            .music-notes-staff-preview[hidden] { display: none; }
+            .music-notes-staff-preview svg { display: block; width: 100%; max-width: 100%; height: auto; }
             .music-notes-roll-frame { position: relative; height: calc(var(--white-key) * 3); }
             .music-notes-roll { height: 100%; overflow: hidden; cursor: crosshair; touch-action: none; overscroll-behavior: contain; }
             .music-notes-roll.panning { cursor: grabbing; }
@@ -53,8 +57,9 @@ window.MusicNotes.mount = function(editorElement, host) {
         document.head.appendChild(style);
     }
     host.innerHTML = `<section class="music-notes-dock" aria-label="Piano roll">
+        <div id="staff-preview" class="music-notes-staff-preview" aria-label="Staff preview for the current editor line"></div>
         <div class="music-notes-transport">
-            <div class="music-notes-cluster"><button id="new-tune" type="button" title="Insert a new ABC tune header" aria-label="New tune">N</button><button id="key-settings" type="button" title="Set tune key">K:</button></div>
+            <div class="music-notes-cluster"><button id="new-tune" type="button" title="Insert a new ABC tune header" aria-label="New tune">N</button><button id="key-settings" type="button" title="Set tune key">K:</button><button id="staff-toggle" type="button" title="Hide staff preview" aria-label="Toggle staff preview" aria-pressed="true" class="active">♪</button></div>
             <div class="music-notes-cluster">
                 <label class="music-notes-slider" title="Volume">Vol <input id="volume" type="range" min="0" max="3.5" value="2" step="0.05"></label>
                 <label class="music-notes-slider" title="Release fade">Rel <input id="release" type="range" min="0" max="3000" value="140" step="10"><output id="release-value">140</output></label>
@@ -110,6 +115,7 @@ function initializeMusicNotes(editorElement, host) {
             const editor = editorElement;
             const keysElement = host.querySelector('#keys');
             const roll = host.querySelector('#roll');
+            const staffPreview = host.querySelector('#staff-preview');
             const volume = host.querySelector('#volume');
             const release = host.querySelector('#release');
             const noteLength = host.querySelector('#note-length');
@@ -248,6 +254,81 @@ function initializeMusicNotes(editorElement, host) {
                 const at = info.headerEnd;
                 const prefix = at > 0 && text[at - 1] !== '\n' ? newline : '';
                 return text.slice(0, at) + prefix + `K:${key}${newline}` + text.slice(at);
+            }
+            let staffPreviewFrame = 0, renderedStaffPreviewKey = null;
+            function voiceAtPosition(source, position, header = headerInfo(source)) {
+                const lineStart = source.lastIndexOf('\n', Math.max(0, position - 1)) + 1;
+                const precedingBody = source.slice(header.bodyStart, lineStart);
+                const bodyVoiceMatches = [...precedingBody.matchAll(/^\s*V\s*:\s*([^\s%]+)/gm)];
+                const headerVoice = source.slice(0, header.headerEnd).match(/^\s*V\s*:\s*([^\s%]+)/m)?.[1];
+                return bodyVoiceMatches.length ? bodyVoiceMatches[bodyVoiceMatches.length - 1][1] : headerVoice || '';
+            }
+            function updateStaffPreview(position = editor.selectionStart) {
+                if (staffPreviewFrame) cancelAnimationFrame(staffPreviewFrame);
+                staffPreviewFrame = requestAnimationFrame(() => {
+                    staffPreviewFrame = 0;
+                    const source = editor.value;
+                    const caret = position;
+                    const lineStart = source.lastIndexOf('\n', Math.max(0, caret - 1)) + 1;
+                    const nextLineBreak = source.indexOf('\n', caret);
+                    const line = source.slice(lineStart, nextLineBreak < 0 ? source.length : nextLineBreak).replace(/\r$/, '').trim();
+                    const header = headerInfo(source);
+                    let prefix = source.slice(0, header.headerEnd);
+                    prefix = prefix.replace(/^[ \t]*[QR][ \t]*:[^\r\n]*(?:\r?\n|$)/gim, '');
+                    if (!/^\s*X\s*:/m.test(prefix)) prefix = `X: 1\n${prefix}`;
+                    if (!/^\s*K\s*:/m.test(prefix)) prefix += `${prefix && !prefix.endsWith('\n') ? '\n' : ''}K: C\n`;
+                    const activeVoice = voiceAtPosition(source, caret, header);
+                    const previewPrefix = `${prefix}${prefix && !prefix.endsWith('\n') ? '\n' : ''}${activeVoice ? `V:${activeVoice}\n` : ''}`;
+                    const previewWidth = Math.max(0, staffPreview.clientWidth);
+                    const validMusicLine = line && !/^%|^[A-Za-z]\s*:|^%%/.test(line) && /[A-Ga-gzZxX]/.test(line);
+                    const previewKey = validMusicLine && window.ABCJS?.renderAbc
+                        ? `${lineStart}\u0000${activeVoice}\u0000${previewPrefix}\u0000${line}\u0000${previewWidth}`
+                        : `blank\u0000${lineStart}\u0000${line}`;
+                    if (previewKey === renderedStaffPreviewKey) return;
+                    renderedStaffPreviewKey = previewKey;
+                    staffPreview.replaceChildren();
+                    staffPreview.style.height = '';
+                    if (!validMusicLine || !window.ABCJS?.renderAbc) return;
+                    try {
+                        const width = Math.max(360, previewWidth - parseFloat(getComputedStyle(staffPreview).paddingRight || '0'));
+                        window.ABCJS.renderAbc(staffPreview.id, `${previewPrefix}${line}\n`, {
+                            staffwidth: width,
+                            scale: 1,
+                            paddingleft: 0,
+                            paddingright: 0,
+                            paddingtop: 0,
+                            paddingbottom: 0
+                        });
+                        const svg = staffPreview.querySelector('svg');
+                        if (svg) {
+                            svg.style.height = `${Math.ceil(svg.getBoundingClientRect().height + 10)}px`;
+                            staffPreview.style.height = `${Math.ceil(svg.getBoundingClientRect().height)}px`;
+                        }
+                        else staffPreview.replaceChildren();
+                    } catch (error) {
+                        staffPreview.replaceChildren();
+                        staffPreview.style.height = '';
+                    }
+                });
+            }
+            function clearStaffPreview() {
+                if (staffPreviewFrame) cancelAnimationFrame(staffPreviewFrame);
+                staffPreviewFrame = 0;
+                renderedStaffPreviewKey = null;
+                staffPreview.replaceChildren();
+                staffPreview.style.height = '';
+            }
+            function firstMusicPosition() {
+                const source = editor.value;
+                let offset = headerInfo(source).bodyStart;
+                while (offset < source.length) {
+                    const newline = source.indexOf('\n', offset);
+                    const line = source.slice(offset, newline < 0 ? source.length : newline).replace(/\r$/, '').trim();
+                    if (line && !/^%|^[A-Za-z]\s*:|^%%/.test(line) && /[A-Ga-gzZxX]/.test(line)) return offset;
+                    if (newline < 0) break;
+                    offset = newline + 1;
+                }
+                return 0;
             }
             function accidentalValue(prefix) {
                 if (!prefix) return null;
@@ -588,6 +669,26 @@ function initializeMusicNotes(editorElement, host) {
                     const endAt = audioStartTime + (event.endMs - playbackElapsed) / (1000 * rate);
                     if (playNote(pitch.midi, id, pitch.velocity, startAt, endAt) !== null) playbackVoices.add(id);
                 }
+                let previousLineStart = -1;
+                const startingVoice = voiceAtPosition(editor.value, editor.selectionStart);
+                let playbackVoice = startingVoice;
+                if (!playbackVoice) {
+                    const firstPlayable = events.find(event => event.endMs > playbackElapsed && Number.isInteger(event.startChar));
+                    if (firstPlayable) playbackVoice = voiceAtPosition(editor.value, firstPlayable.startChar);
+                }
+                for (const event of events) {
+                    if (event.endMs <= playbackElapsed) continue;
+                    if (!Number.isInteger(event.startChar) || event.startChar < 0 || event.startChar > editor.value.length) continue;
+                    if (playbackVoice && voiceAtPosition(editor.value, event.startChar) !== playbackVoice) continue;
+                    const lineStart = editor.value.lastIndexOf('\n', Math.max(0, event.startChar - 1)) + 1;
+                    if (lineStart === previousLineStart) continue;
+                    previousLineStart = lineStart;
+                    const delay = leadSeconds * 1000 + Math.max(0, event.startMs - playbackElapsed) / rate;
+                    later(() => {
+                        editor.setSelectionRange(event.startChar, event.startChar);
+                        updateStaffPreview(event.startChar);
+                    }, delay, run);
+                }
                 scheduleMetronome(playbackElapsed, audioStartTime, rate);
                 later(() => {
                     if (loopPlayback) startFrom(0);
@@ -633,7 +734,9 @@ function initializeMusicNotes(editorElement, host) {
             function stop() {
                 playbackRun++; clearTimers(playbackTimers); clearMetronome(); stopPlaybackVoices(); stopPreview();
                 playbackState = 'stopped'; updatePlaybackControl(); playbackElapsed = 0;
-                editor.setSelectionRange(0, 0);
+                const position = firstMusicPosition();
+                editor.setSelectionRange(position, position);
+                updateStaffPreview(position);
             }
             function metronomeClick(when = audioContext.currentTime) {
                 if (!audioContext || audioContext.state !== 'running') getAudioContext();
@@ -1030,11 +1133,42 @@ function initializeMusicNotes(editorElement, host) {
                 }
             });
             editor.addEventListener('input', () => {
+                updateStaffPreview();
                 refreshTuneKey();
                 playbackRun++; clearTimers(playbackTimers); clearMetronome(); stopPlaybackVoices(); stopPreview();
                 playbackState = 'stopped'; updatePlaybackControl(); playbackElapsed = 0;
                 preparedText = ''; events = [];
             });
+            editor.addEventListener('keyup', () => updateStaffPreview());
+            editor.addEventListener('click', () => updateStaffPreview());
+            document.addEventListener('selectionchange', () => {
+                if (document.activeElement === editor) updateStaffPreview();
+            });
+            let previousStaffPreviewWidth = -1;
+            if (window.ResizeObserver) new ResizeObserver(() => {
+                const width = staffPreview.clientWidth;
+                if (width === previousStaffPreviewWidth) return;
+                previousStaffPreviewWidth = width;
+                renderedStaffPreviewKey = null;
+                updateStaffPreview();
+            }).observe(staffPreview);
+            const staffToggle = host.querySelector('#staff-toggle');
+            staffPreview.hidden = readSetting('staffPreviewVisible') === 'false';
+            staffToggle.setAttribute('aria-pressed', String(!staffPreview.hidden));
+            staffToggle.title = staffPreview.hidden ? 'Show staff preview' : 'Hide staff preview';
+            staffToggle.classList.toggle('active', !staffPreview.hidden);
+            staffToggle.addEventListener('click', () => {
+                staffPreview.hidden = !staffPreview.hidden;
+                saveSetting('staffPreviewVisible', !staffPreview.hidden);
+                staffToggle.setAttribute('aria-pressed', String(!staffPreview.hidden));
+                staffToggle.title = staffPreview.hidden ? 'Show staff preview' : 'Hide staff preview';
+                staffToggle.classList.toggle('active', !staffPreview.hidden);
+                if (!staffPreview.hidden) {
+                    renderedStaffPreviewKey = null;
+                    updateStaffPreview();
+                }
+            });
+            updateStaffPreview();
 
             function resetForEditorChange() {
                 playbackRun++; clearTimers(playbackTimers); clearMetronome(); stopPlaybackVoices(); stopPreview();
@@ -1053,7 +1187,7 @@ function initializeMusicNotes(editorElement, host) {
             buildKeyboard();
             loadSampleArchive().catch(error => console.error(error));
             return Object.freeze({
-                refresh() { resetForEditorChange(); refreshTuneKey(); requestAnimationFrame(restorePianoRollPosition); },
+                refresh() { clearStaffPreview(); resetForEditorChange(); refreshTuneKey(); requestAnimationFrame(restorePianoRollPosition); },
                 suspend: resetForEditorChange,
                 loadSamples: loadSampleArchive
             });
